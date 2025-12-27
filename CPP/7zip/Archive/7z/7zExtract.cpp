@@ -106,8 +106,8 @@ HRESULT CFolderOutStream::OpenFile(bool isCorrupted)
   // Initialize SHA256 based on verification level and file signature presence
   // bool hasSig = (_fileIndex < _db->FileSignatures.Size() && 
   //                _db->FileSignatures[_fileIndex].Size() > 0);
-  // Calculate SHA256 if file has signature OR if strict mode and archive has signatures
-  _calcSha256 = false; // TEMPORARY: Disable signature verification for debugging
+  // TEMPORARY: Disable file signature verification to debug the issue
+  _calcSha256 = false;
   if (_calcSha256)
     Sha256_Init(&_sha256);
 

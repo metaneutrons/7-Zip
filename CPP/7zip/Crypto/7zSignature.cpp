@@ -218,7 +218,6 @@ HRESULT CSignatureHandler::LoadIdentity(const wchar_t *certPath, const wchar_t *
   for (unsigned i = 0; i < _password.Len(); i++)
     passA += (char)_password[i];
   
-  
   CFStringRef password = CFStringCreateWithCString(kCFAllocatorDefault, 
     passA.IsEmpty() ? "" : passA.Ptr(), kCFStringEncodingUTF8);
   const void *keys[] = { kSecImportExportPassphrase };
@@ -227,7 +226,6 @@ HRESULT CSignatureHandler::LoadIdentity(const wchar_t *certPath, const wchar_t *
   
   CFArrayRef items = NULL;
   OSStatus status = SecPKCS12Import(p12Data, options, &items);
-  
   
   CFRelease(p12Data);
   CFRelease(password);
