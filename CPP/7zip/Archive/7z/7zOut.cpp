@@ -876,7 +876,72 @@ void COutArchive::WriteHeader(
   }
   */
 
+  // Write per-file signatures
+  {
+    unsigned numDefined = 0;
+    FOR_VECTOR (i, db.FileSignatures)
+      if (db.FileSignatures[i].Size() > 0)
+        numDefined++;
+    
+    if (numDefined > 0)
+    {
+      // Build bool vector
+      CBoolVector sigDefs;
+      sigDefs.ClearAndSetSize(db.Files.Size());
+      for (unsigned i = 0; i < db.Files.Size(); i++)
+        sigDefs[i] = (i < db.FileSignatures.Size() && db.FileSignatures[i].Size() > 0);
+      
+      // Calculate total data size: bool vector + signature data
+      UInt64 dataSize = Bv_GetSizeInBytes(sigDefs);
+      FOR_VECTOR (i, db.FileSignatures)
+      {
+        if (db.FileSignatures[i].Size() > 0)
+        {
+          dataSize += GetBigNumberSize(db.FileSignatures[i].Size());
+          dataSize += db.FileSignatures[i].Size();
+        }
+      }
+      
+      // Write: ID, total size, bool vector, signature data
+      WriteByte(NID::kFileSignature);
+      WriteNumber(dataSize);
+      Write_BoolVector(sigDefs);
+      
+      FOR_VECTOR (j, db.FileSignatures)
+      {
+        if (db.FileSignatures[j].Size() > 0)
+        {
+          WriteNumber(db.FileSignatures[j].Size());
+          WriteBytes(db.FileSignatures[j], db.FileSignatures[j].Size());
+        }
+      }
+    }
+  }
+
   WriteByte(NID::kEnd); // for files
+  
+  // Write digital signature properties if present
+  if (db.ArchiveSignature.Size() > 0 || db.CertificateStore.Size() > 0)
+  {
+    WriteByte(NID::kArchiveProperties);
+    
+    if (db.ArchiveSignature.Size() > 0)
+    {
+      WriteID(NID::kArchiveSignature);
+      WriteNumber(db.ArchiveSignature.Size());
+      WriteBytes(db.ArchiveSignature, db.ArchiveSignature.Size());
+    }
+    
+    if (db.CertificateStore.Size() > 0)
+    {
+      WriteID(NID::kCertificateStore);
+      WriteNumber(db.CertificateStore.Size());
+      WriteBytes(db.CertificateStore, db.CertificateStore.Size());
+    }
+    
+    WriteByte(NID::kEnd);
+  }
+  
   WriteByte(NID::kEnd); // for headers
 }
 

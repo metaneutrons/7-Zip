@@ -219,6 +219,8 @@ static const char * const kDataAfterEnd = "There are some data after the end of 
 static const char * const kIsNotArc = "Is not archive";
 static const char * const kHeadersError = "Headers Error";
 static const char * const kWrongPassword = "Wrong password";
+static const char * const kSignatureFailed = "Digital Signature Verification Failed";
+static const char * const kUntrustedCert = "Certificate Authority is not trusted";
 
 static const char * const k_ErrorFlagsMessages[] =
 {
@@ -448,6 +450,12 @@ void SetExtractErrorMessage(Int32 opRes, Int32 encrypted, AString &dest)
         break;
       case NArchive::NExtract::NOperationResult::kWrongPassword:
         s = kWrongPassword;
+        break;
+      case NArchive::NExtract::NOperationResult::kSignatureFailed:
+        s = kSignatureFailed;
+        break;
+      case NArchive::NExtract::NOperationResult::kUntrustedCert:
+        s = kUntrustedCert;
         break;
       default: break;
     }

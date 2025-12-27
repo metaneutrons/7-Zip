@@ -157,6 +157,8 @@ public:
   void Set_Int64(Int64 value) throw();
 
   BSTR AllocBstr(unsigned numChars);
+  
+  HRESULT SetBlob(const void *data, ULONG size) throw();
 
   HRESULT Clear() throw();
   HRESULT Copy(const PROPVARIANT *pSrc) throw();

@@ -435,6 +435,29 @@ HRESULT Extract(
       continue;
     }
 
+
+    // Check archive signature status based on verification level
+    // 0=strict, 1=mixed, 2=permissive, 3=warn
+    if (arcLink.Arcs.Size() > 0)
+    {
+      IInArchive *archive = arcLink.Arcs.Back().Archive;
+      NWindows::NCOM::CPropVariant sigStatus;
+      if (archive->GetArchiveProperty(kpidSignatureStatus, &sigStatus) == S_OK && sigStatus.vt == VT_UI4)
+      {
+        if (sigStatus.ulVal != NArchive::NExtract::NOperationResult::kOK)
+        {
+          if (options.DigSigVerify >= 2)
+          {
+            // Permissive/warn mode - continue but could log warning here
+          }
+          else
+          {
+            errorMessage = L"Digital signature verification failed";
+            return E_FAIL;
+          }
+        }
+      }
+    }
    #if defined(_WIN32) && !defined(UNDER_CE) && !defined(Z7_SFX)
     if (options.ZoneMode != NExtract::NZoneIdMode::kNone
         && !options.StdInMode)

@@ -4,9 +4,10 @@
 #define ZIP7_INC_7Z_FOLDER_IN_STREAM_H
 
 #include "../../../../C/7zCrc.h"
-
+#include "../../../../C/Sha256.h"
 #include "../../../Common/MyCom.h"
 #include "../../../Common/MyVector.h"
+#include "../../../Common/MyBuffer.h"
 // #include "../Common/InStreamWithCRC.h"
 
 #include "../../ICoder.h"
@@ -29,6 +30,7 @@ Z7_CLASS_IMP_COM_2(
   UInt64 _totalSize_for_Coder;
   UInt64 _pos;
   UInt32 _crc;
+  CSha256 _sha256;
   bool _size_Defined;
   bool _times_Defined;
   UInt64 _size;
@@ -51,6 +53,7 @@ public:
   bool Need_CTime;
   bool Need_ATime;
   bool Need_Attrib;
+  bool Need_Sha256;  // For per-file signatures
   // bool Need_Crc;
   // bool Need_FolderCrc;
   // unsigned AlignLog;
@@ -63,6 +66,7 @@ public:
   CRecordVector<UInt64> MTimes;
   CRecordVector<UInt64> CTimes;
   CRecordVector<UInt64> ATimes;
+  CObjectVector<CByteBuffer> Sha256Digests;  // Per-file SHA256 hashes
   // UInt32 FolderCrc;
 
   // UInt32 GetFolderCrc() const { return CRC_GET_DIGEST(FolderCrc); }
@@ -89,7 +93,8 @@ public:
       Need_MTime(false),
       Need_CTime(false),
       Need_ATime(false),
-      Need_Attrib(false)
+      Need_Attrib(false),
+      Need_Sha256(false)
       // , Need_Crc(true)
       // , Need_FolderCrc(false)
       // , AlignLog(0)

@@ -104,6 +104,13 @@ struct CUpdateOptions
   CBoolPair StoreOwnerId;
   CBoolPair StoreOwnerName;
 
+  // Digital signature options
+  UString DigSigCert;
+  UString DigSigKey;
+  UString DigSigAlgo;
+  UString DigSigPass;
+  int DigSigLevel; // 0=both(default), 'a'=archive-only, 'f'=file-only
+
   EArcNameMode ArcNameMode;
   NWildcard::ECensorPathMode PathMode;
 
@@ -141,6 +148,8 @@ struct CUpdateOptions
     DeleteAfterCompressing(false),
     SetArcMTime(false),
     RenameMode(false),
+
+    DigSigLevel(0),
 
     ArcNameMode(k_ArcNameMode_Smart),
     PathMode(NWildcard::k_RelatPath)

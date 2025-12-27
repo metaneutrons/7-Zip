@@ -25,6 +25,7 @@
 
 #include <stddef.h> // for wchar_t
 #include <string.h>
+#include <stdlib.h> // for malloc/free
 // #include <stdint.h> // for uintptr_t
 
 #include "../../C/7zTypes.h"
@@ -216,13 +217,20 @@ enum VARENUM
   VT_UINT = 23,
   VT_VOID = 24,
   VT_HRESULT = 25,
-  VT_FILETIME = 64
+  VT_FILETIME = 64,
+  VT_BLOB = 65
 };
 
 typedef unsigned short VARTYPE;
 typedef WORD PROPVAR_PAD1;
 typedef WORD PROPVAR_PAD2;
 typedef WORD PROPVAR_PAD3;
+
+typedef struct tagBLOB
+{
+  ULONG cbSize;
+  BYTE *pBlobData;
+} BLOB;
 
 typedef struct tagPROPVARIANT
 {
@@ -246,6 +254,7 @@ typedef struct tagPROPVARIANT
     SCODE scode;
     FILETIME filetime;
     BSTR bstrVal;
+    BLOB blob;
   };
 } PROPVARIANT;
 
@@ -269,6 +278,9 @@ EXTERN_C BSTR SysAllocString(const OLECHAR *sz);
 EXTERN_C void SysFreeString(BSTR bstr);
 EXTERN_C UINT SysStringByteLen(BSTR bstr);
 EXTERN_C UINT SysStringLen(BSTR bstr);
+
+inline void *CoTaskMemAlloc(size_t size) { return malloc(size); }
+inline void CoTaskMemFree(void *p) { free(p); }
 
 EXTERN_C DWORD GetLastError();
 EXTERN_C void SetLastError(DWORD dwCode);

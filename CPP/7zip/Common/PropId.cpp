@@ -113,5 +113,14 @@ const Byte k7z_PROPID_To_VARTYPE[kpid_NUM_DEFINED] =
   VT_UI4,
   VT_UI4,
   VT_UI4,
-  VT_UI4  // kpidDevMinor
+  VT_UI4, // kpidDevMinor
+  // Digital signature properties
+  VT_BSTR, // kpidArchSignature
+  VT_BSTR, // kpidFileSignature
+  VT_BSTR, // kpidCertificateStore
+  VT_BSTR, // kpidSignerName
+  VT_I4,   // kpidSignatureStatus - verification result code
+  VT_BSTR, // kpidSignerIssuer
+  VT_BSTR, // kpidTimestampAuthority
+  VT_BSTR  // kpidTimestampTime
 };

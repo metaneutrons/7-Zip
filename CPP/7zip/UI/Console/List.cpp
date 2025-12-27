@@ -1019,6 +1019,29 @@ HRESULT Print_OpenArchive_Props(CStdOutStream &so, const CCodecs *codecs, const 
       }
     }
     
+    // Check for digital signature
+    {
+      CPropVariant prop;
+      if (archive->GetArchiveProperty(kpidArchSignature, &prop) == S_OK && prop.vt == VT_BSTR && prop.bstrVal)
+      {
+        so << "Signed: Yes" << endl;
+        CPropVariant signerProp;
+        if (archive->GetArchiveProperty(kpidSignerName, &signerProp) == S_OK && signerProp.vt == VT_BSTR && signerProp.bstrVal)
+          so << "Signed by: " << signerProp.bstrVal << endl;
+        CPropVariant issuerProp;
+        if (archive->GetArchiveProperty(kpidSignerIssuer, &issuerProp) == S_OK && issuerProp.vt == VT_BSTR && issuerProp.bstrVal)
+          so << "Issuer: " << issuerProp.bstrVal << endl;
+        CPropVariant tsProp;
+        if (archive->GetArchiveProperty(kpidTimestampTime, &tsProp) == S_OK && tsProp.vt == VT_BSTR && tsProp.bstrVal)
+        {
+          so << "Timestamp: " << tsProp.bstrVal << endl;
+          CPropVariant tsaProp;
+          if (archive->GetArchiveProperty(kpidTimestampAuthority, &tsaProp) == S_OK && tsaProp.vt == VT_BSTR && tsaProp.bstrVal)
+            so << "TSA: " << tsaProp.bstrVal << endl;
+        }
+      }
+    }
+    
     if (r != arcLink.Arcs.Size() - 1)
     {
       UInt32 numProps;

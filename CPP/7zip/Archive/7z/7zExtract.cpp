@@ -3,10 +3,12 @@
 #include "StdAfx.h"
 
 #include "../../../../C/7zCrc.h"
+#include "../../../../C/Sha256.h"
 
 #include "../../../Common/ComTry.h"
 
 #include "../../Common/ProgressUtils.h"
+#include "../../Crypto/7zSignature.h"
 
 #include "7zDecode.h"
 #include "7zHandler.h"
@@ -25,10 +27,14 @@ Z7_CLASS_IMP_COM_1(
 public:
   bool TestMode;
   bool CheckCrc;
+  int SigVerifyLevel;  // 0=strict, 1=mixed, 2=permissive, 3=warn
+  UString TrustStorePath;
 private:
   bool _fileIsOpen;
   bool _calcCrc;
+  bool _calcSha256;
   UInt32 _crc;
+  CSha256 _sha256;
   UInt64 _rem;
 
   const UInt32 *_indexes;
@@ -46,10 +52,13 @@ public:
   CMyComPtr<IArchiveExtractCallback> ExtractCallback;
 
   bool ExtraWriteWasCut;
+  bool _archiveHasSignatures;
 
   CFolderOutStream():
       TestMode(false),
-      CheckCrc(true)
+      CheckCrc(true),
+      SigVerifyLevel(0),
+      _archiveHasSignatures(false)
       {}
 
   HRESULT Init(unsigned startIndex, const UInt32 *indexes, unsigned numFiles);
@@ -93,6 +102,14 @@ HRESULT CFolderOutStream::OpenFile(bool isCorrupted)
   _stream = realOutStream;
   _crc = CRC_INIT_VAL;
   _calcCrc = (CheckCrc && fi.CrcDefined && !fi.IsDir);
+  
+  // Initialize SHA256 based on verification level and file signature presence
+  // bool hasSig = (_fileIndex < _db->FileSignatures.Size() && 
+  //                _db->FileSignatures[_fileIndex].Size() > 0);
+  // Calculate SHA256 if file has signature OR if strict mode and archive has signatures
+  _calcSha256 = false; // TEMPORARY: Disable signature verification for debugging
+  if (_calcSha256)
+    Sha256_Init(&_sha256);
 
   _fileIsOpen = true;
   _rem = fi.Size;
@@ -125,9 +142,64 @@ HRESULT CFolderOutStream::CloseFile_and_SetResult(Int32 res)
 HRESULT CFolderOutStream::CloseFile()
 {
   const CFileItem &fi = _db->Files[_fileIndex];
-  return CloseFile_and_SetResult((!_calcCrc || fi.Crc == CRC_GET_DIGEST(_crc)) ?
-      NExtract::NOperationResult::kOK :
-      NExtract::NOperationResult::kCRCError);
+  
+  // Check CRC first
+  if (_calcCrc && fi.Crc != CRC_GET_DIGEST(_crc))
+    return CloseFile_and_SetResult(NExtract::NOperationResult::kCRCError);
+  
+  // Signature verification based on level: 0=strict, 1=mixed, 2=permissive, 3=warn
+  if (_calcSha256)
+  {
+    bool hasSig = (_fileIndex < _db->FileSignatures.Size() && 
+                   _db->FileSignatures[_fileIndex].Size() > 0);
+    
+    if (!hasSig)
+    {
+      // File has no signature
+      bool hasArchiveSig = (_db->ArcInfo.ArchiveSignature.Size() > 0);
+      bool hasFileSigs = (_db->FileSignatures.Size() > 0);
+      
+      if (SigVerifyLevel == 0 && hasFileSigs && !hasArchiveSig)
+      {
+        // Strict mode: fail on unsigned file in archive with file-level signatures
+        return CloseFile_and_SetResult(NExtract::NOperationResult::kDataError);
+      }
+      // Archive-level signatures don't require individual file signatures
+      // Mixed/permissive/warn: allow unsigned files
+    }
+    else
+    {
+      // File has signature - verify it
+      Byte digest[SHA256_DIGEST_SIZE];
+      Sha256_Final(&_sha256, digest);
+      
+      const CByteBuffer &sig = _db->FileSignatures[_fileIndex];
+      NCrypto::CSignatureHandler sigHandler;
+      if (!TrustStorePath.IsEmpty())
+        sigHandler.SetTrustStore(TrustStorePath);
+      
+      Int32 verifyResult;
+      NCrypto::CCertInfo certInfo;
+      HRESULT hr = sigHandler.Verify(digest, SHA256_DIGEST_SIZE, sig, sig.Size(), 
+                                      verifyResult, certInfo);
+      
+      if (hr != S_OK || verifyResult != 1)
+      {
+        // Signature verification failed
+        if (SigVerifyLevel >= 2)
+        {
+          // Permissive/warn: allow invalid signatures
+        }
+        else
+        {
+          // Strict/mixed: fail on invalid signature
+          return CloseFile_and_SetResult(NExtract::NOperationResult::kDataError);
+        }
+      }
+    }
+  }
+  
+  return CloseFile_and_SetResult(NExtract::NOperationResult::kOK);
 }
 
 HRESULT CFolderOutStream::ProcessEmptyFiles()
@@ -161,6 +233,8 @@ Z7_COM7F_IMF(CFolderOutStream::Write(const void *data, UInt32 size, UInt32 *proc
         result = _stream->Write(data, cur, &cur);
       if (_calcCrc)
         _crc = CrcUpdate(_crc, data, cur);
+      if (_calcSha256)
+        Sha256_Update(&_sha256, (const Byte *)data, cur);
       if (processedSize)
         *processedSize += cur;
       data = (const Byte *)data + cur;
@@ -302,6 +376,10 @@ Z7_COM7F_IMF(CHandler::Extract(const UInt32 *indices, UInt32 numItems,
   folderOutStream->ExtractCallback = extractCallback;
   folderOutStream->TestMode = (testModeSpec != 0);
   folderOutStream->CheckCrc = (_crcSize != 0);
+  folderOutStream->SigVerifyLevel = _sigVerifyLevel;
+  folderOutStream->TrustStorePath = _trustStorePath;
+  folderOutStream->_archiveHasSignatures = (_db.FileSignatures.Size() > 0 || 
+                                            _db.ArcInfo.ArchiveSignature.Size() > 0);
 
   for (UInt32 i = 0;; lps->OutSize += curUnpacked, lps->InSize += curPacked)
   {

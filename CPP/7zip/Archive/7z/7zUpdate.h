@@ -111,6 +111,13 @@ struct CUpdateOptions
 
   CHeaderOptions HeaderOptions;
 
+  // Digital signature options
+  UString DigSigCert;
+  UString DigSigKey;
+  UString DigSigAlgo;
+  UString DigSigPass;
+  int DigSigLevel; // 0=both, 1=archive-only, 2=file-only
+
   CUIntVector DisabledFilterIDs;
 
   void Add_DisabledFilter_for_id(UInt32 id,

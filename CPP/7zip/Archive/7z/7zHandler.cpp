@@ -3,6 +3,7 @@
 #include "StdAfx.h"
 
 #include "../../../../C/CpuArch.h"
+#include "../../../../C/Sha256.h"
 
 #include "../../../Common/ComTry.h"
 #include "../../../Common/IntToString.h"
@@ -15,6 +16,7 @@
 
 #include "7zHandler.h"
 #include "7zProperties.h"
+#include "../../Crypto/7zSignature.h"
 
 #ifdef Z7_7Z_SET_PROPERTIES
 #ifdef Z7_EXTRACT_ONLY
@@ -30,6 +32,11 @@ namespace N7z {
 
 CHandler::CHandler()
 {
+  _signatureVerifyResult = NExtract::NOperationResult::kOK;
+  _signerWeakKey = false;
+  _signerWeakAlgo = false;
+  _sigVerifyLevel = NCrypto::NSigVerifyLevel::kStrict;
+  
   #ifndef Z7_NO_CRYPTO
   _isEncrypted = false;
   _passwordIsDefined = false;
@@ -254,6 +261,21 @@ Z7_COM7F_IMF(CHandler::GetArchiveProperty(PROPID propID, PROPVARIANT *value))
       break;
     }
     
+    case kpidWarning:
+    {
+      AString s;
+      if (_signerWeakKey)
+        s += "WARNING: Signing certificate uses weak key (Recommended: RSA 2048+)";
+      if (_signerWeakAlgo)
+      {
+        if (!s.IsEmpty()) s += "\n";
+        s += "WARNING: Weak legacy algorithm (SHA-1)";
+      }
+      if (!s.IsEmpty())
+        prop = s;
+      break;
+    }
+    
     case kpidErrorFlags:
     {
       UInt32 v = 0;
@@ -272,6 +294,60 @@ Z7_COM7F_IMF(CHandler::GetArchiveProperty(PROPID propID, PROPVARIANT *value))
         prop = true;
       break;
     }
+    
+    case kpidArchSignature:
+    {
+      if (_db.ArcInfo.ArchiveSignature.Size() > 0)
+      {
+        prop.SetBlob(_db.ArcInfo.ArchiveSignature, (ULONG)_db.ArcInfo.ArchiveSignature.Size());
+      }
+      break;
+    }
+    
+    case kpidCertificateStore:
+    {
+      if (_db.ArcInfo.CertificateStore.Size() > 0)
+      {
+        prop.SetBlob(_db.ArcInfo.CertificateStore, (ULONG)_db.ArcInfo.CertificateStore.Size());
+      }
+      break;
+    }
+    
+    case kpidSignerName:
+    {
+      if (!_signerName.IsEmpty())
+        prop = _signerName;
+      break;
+    }
+    
+    case kpidSignatureStatus:
+    {
+      if (_db.ArcInfo.ArchiveSignature.Size() > 0)
+        prop = (UInt32)_signatureVerifyResult;
+      break;
+    }
+    
+    case kpidSignerIssuer:
+    {
+      if (!_signerIssuer.IsEmpty())
+        prop = _signerIssuer;
+      break;
+    }
+    
+    case kpidTimestampAuthority:
+    {
+      if (!_timestampAuthority.IsEmpty())
+        prop = _timestampAuthority;
+      break;
+    }
+    
+    case kpidTimestampTime:
+    {
+      if (!_timestampTime.IsEmpty())
+        prop = _timestampTime;
+      break;
+    }
+    
     default: break;
   }
   return prop.Detach(value);
@@ -633,6 +709,16 @@ Z7_COM7F_IMF(CHandler::GetProperty(UInt32 index, PROPID propID, PROPVARIANT *val
 
     case kpidPath: return _db.GetPath_Prop(index, value);
     
+    case kpidFileSignature:
+      if (index < _db.FileSignatures.Size() && _db.FileSignatures[index].Size() > 0)
+      {
+        const CByteBuffer &sig = _db.FileSignatures[index];
+        NCOM::CPropVariant prop;
+        prop.SetBlob(sig, (ULONG)sig.Size());
+        return prop.Detach(value);
+      }
+      break;
+    
     #ifndef Z7_SFX
     
     case kpidMethod: return SetMethodToProp(_db.FileIndexToFolderIndexMap[index2], value);
@@ -714,6 +800,93 @@ Z7_COM7F_IMF(CHandler::Open(IInStream *stream,
         );
     RINOK(result)
     
+    // Verify archive signature if present
+    _signatureVerifyResult = NExtract::NOperationResult::kOK;
+    if (_db.ArcInfo.ArchiveSignature.Size() > 0)
+    {
+      try {
+        // Re-enable signature verification for Apple Developer certificate testing
+        // Compute hash of header content (same as signing)
+        CSha256 sha;
+        Sha256_Init(&sha);
+        
+        // Hash pack sizes
+        for (CNum i = 0; i < _db.NumPackStreams; i++)
+        {
+          UInt64 size = _db.GetStreamPackSize(i);
+          Sha256_Update(&sha, (const Byte *)&size, sizeof(size));
+        }
+        
+        // Hash file count
+        UInt32 numFiles = _db.Files.Size();
+        Sha256_Update(&sha, (const Byte *)&numFiles, sizeof(numFiles));
+        
+        // Hash file metadata
+        for (unsigned i = 0; i < _db.Files.Size(); i++)
+        {
+          const CFileItem &file = _db.Files[i];
+          Sha256_Update(&sha, (const Byte *)&file.Size, sizeof(file.Size));
+          Sha256_Update(&sha, (const Byte *)&file.Crc, sizeof(file.Crc));
+          Byte flags = (file.HasStream ? 1 : 0) | (file.IsDir ? 2 : 0) | (file.CrcDefined ? 4 : 0);
+          Sha256_Update(&sha, &flags, 1);
+          
+          // Hash filename
+          if (_db.NameOffsets && i < _db.Files.Size())
+          {
+            size_t nameOffset = _db.NameOffsets[i];
+            size_t nameLen = _db.NameOffsets[i + 1] - nameOffset;
+            const Byte *nameData = _db.NamesBuf.ConstData() + nameOffset * 2;
+            Sha256_Update(&sha, nameData, nameLen * 2);
+          }
+        }
+        
+        // Hash timestamps if present
+        for (unsigned i = 0; i < _db.MTime.Vals.Size(); i++)
+        {
+          UInt64 mtime = _db.MTime.Vals[i];
+          Sha256_Update(&sha, (const Byte *)&mtime, sizeof(mtime));
+        }
+        
+        // Hash attributes if present
+        for (unsigned i = 0; i < _db.Attrib.Vals.Size(); i++)
+        {
+          UInt32 attr = _db.Attrib.Vals[i];
+          Sha256_Update(&sha, (const Byte *)&attr, sizeof(attr));
+        }
+        
+        // Include file signatures for cryptographic binding
+        for (unsigned i = 0; i < _db.FileSignatures.Size(); i++)
+        {
+          if (_db.FileSignatures[i].Size() > 0)
+            Sha256_Update(&sha, _db.FileSignatures[i], _db.FileSignatures[i].Size());
+        }
+        
+        Byte digest[SHA256_DIGEST_SIZE];
+        Sha256_Final(&sha, digest);
+        
+        NCrypto::CSignatureHandler sigHandler;
+        if (!_trustStorePath.IsEmpty())
+          sigHandler.SetTrustStore(_trustStorePath);
+        NCrypto::CCertInfo certInfo;
+        sigHandler.Verify(digest, SHA256_DIGEST_SIZE, 
+                          _db.ArcInfo.ArchiveSignature,
+                          _db.ArcInfo.ArchiveSignature.Size(),
+                          _signatureVerifyResult, certInfo);
+        _signerName = certInfo.Subject;
+        _signerIssuer = certInfo.Issuer;
+        _signerWeakKey = certInfo.IsWeakKey;
+        _signerWeakAlgo = certInfo.IsWeakAlgo;
+        _signerExpired = certInfo.IsExpired;
+        _hasTimestamp = certInfo.TimestampInfo.HasTimestamp;
+        _timestampAuthority = certInfo.TimestampInfo.Authority;
+        _timestampTime = certInfo.TimestampInfo.Timestamp;
+      }
+      catch (...) {
+        // Signature verification failed, but don't fail the archive open
+        _signatureVerifyResult = NExtract::NOperationResult::kSignatureFailed;
+      }
+    }
+    
     _inStream = stream;
   }
   catch(...)
@@ -763,6 +936,25 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
     if (name.IsEmpty())
       return E_INVALIDARG;
     const PROPVARIANT &value = values[i];
+    
+    // Digital signature trust store
+    if (name.IsEqualTo("dst"))
+    {
+      if (value.vt == VT_BSTR)
+        _trustStorePath = value.bstrVal;
+      continue;
+    }
+    
+    // Digital signature verification level
+    if (name.IsEqualTo("dsv"))
+    {
+      if (value.vt == VT_UI4)
+        _sigVerifyLevel = (int)value.ulVal;
+      else if (value.vt == VT_BSTR && value.bstrVal && value.bstrVal[0])
+        _sigVerifyLevel = value.bstrVal[0] - '0';
+      continue;
+    }
+    
     UInt32 number;
     const unsigned index = ParseStringToUInt32(name, number);
     if (index == 0)

@@ -143,7 +143,7 @@ DEL_OBJ_EXE = -$(RM) $(O)\*.o $(O)\$(PROG).exe $(O)\$(PROG).dll
 endif
 
 LIB2_GUI = -lOle32 -lGdi32 -lComctl32 -lComdlg32 -lShell32 $(LIB_HTMLHELP)
-LIB2 = -loleaut32 -luuid -ladvapi32 -lUser32 $(LIB2_GUI)
+LIB2 = -loleaut32 -luuid -ladvapi32 -lUser32 -lcrypt32 $(LIB2_GUI)
 
 # v24.00: -DUNICODE and -D_UNICODE are defined in precompilation header files
 # CXXFLAGS_EXTRA = -DUNICODE -D_UNICODE
@@ -163,6 +163,18 @@ DEL_OBJ_EXE = -$(RM) $(PROGPATH) $(PROGPATH_STATIC) $(OBJS)
 # LOCAL_LIBS_DLL=$(LOCAL_LIBS) -ldl
 LIB2 = -lpthread
 LIB2 = -lpthread -ldl
+
+# Platform-specific crypto libraries (only for native builds, not cross-compile)
+# Check if we're cross-compiling by looking at the compiler name
+ifneq ($(findstring mingw,$(CC)),mingw)
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+LIB2 += -framework Security -framework CoreFoundation
+endif
+ifeq ($(UNAME_S),Linux)
+LIB2 += -lssl -lcrypto
+endif
+endif
 
 
 endif
@@ -850,6 +862,8 @@ $O/WzAes.o: ../../Crypto/WzAes.cpp
 $O/ZipCrypto.o: ../../Crypto/ZipCrypto.cpp
 	$(CXX) $(CXXFLAGS) $<
 $O/ZipStrong.o: ../../Crypto/ZipStrong.cpp
+	$(CXX) $(CXXFLAGS) $<
+$O/7zSignature.o: ../../Crypto/7zSignature.cpp
 	$(CXX) $(CXXFLAGS) $<
 
 

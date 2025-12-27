@@ -88,11 +88,15 @@ namespace NID
     kEncodedHeader,
 
     kStartPos,
-    kDummy
+    kDummy,
 
     // kNtSecure,
     // kParent,
     // kIsAux
+
+    kArchiveSignature = 0x25,
+    kFileSignature = 0x26,
+    kCertificateStore = 0x27
   };
 }
 

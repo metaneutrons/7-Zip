@@ -113,6 +113,16 @@ enum
   kpidDevMajor,
   kpidDevMinor,
 
+  // Digital signature properties
+  kpidArchSignature,
+  kpidFileSignature,
+  kpidCertificateStore,
+  kpidSignerName,
+  kpidSignatureStatus,
+  kpidSignerIssuer,
+  kpidTimestampAuthority,
+  kpidTimestampTime,
+
   kpid_NUM_DEFINED,
 
   kpidUserDefined = 0x10000

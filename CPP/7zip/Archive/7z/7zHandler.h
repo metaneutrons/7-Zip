@@ -61,6 +61,13 @@ public:
   CUIntVector _enabledFilters;
   CUIntVector _disabledFilters;
   
+  // Digital signature options
+  UString _digSigCert;
+  UString _digSigKey;
+  UString _digSigAlgo;
+  UString _digSigPass;
+  int _digSigLevel;
+  
   void InitSolidFiles() { _numSolidFiles = (UInt64)(Int64)(-1); }
   void InitSolidSize()  { _numSolidBytes = (UInt64)(Int64)(-1); }
   void InitSolid()
@@ -128,6 +135,19 @@ class CHandler Z7_final:
 private:
   CMyComPtr<IInStream> _inStream;
   NArchive::N7z::CDbEx _db;
+  
+  // Signature verification state
+  Int32 _signatureVerifyResult;
+  UString _signerName;
+  UString _signerIssuer;
+  bool _signerWeakKey;
+  bool _signerWeakAlgo;
+  bool _signerExpired;
+  bool _hasTimestamp;
+  UString _timestampAuthority;
+  UString _timestampTime;
+  UString _trustStorePath;
+  int _sigVerifyLevel;  // 0=strict, 1=mixed, 2=permissive, 3=warn
   
  #ifndef Z7_NO_CRYPTO
   bool _isEncrypted;

@@ -192,6 +192,23 @@ BSTR CPropVariant::AllocBstr(unsigned numChars)
   return bstrVal;
 }
 
+HRESULT CPropVariant::SetBlob(const void *data, ULONG size) throw()
+{
+  InternalClear();
+  blob.cbSize = size;
+  blob.pBlobData = (BYTE *)CoTaskMemAlloc(size);
+  if (!blob.pBlobData)
+  {
+    vt = VT_ERROR;
+    scode = E_OUTOFMEMORY;
+    return E_OUTOFMEMORY;
+  }
+  memcpy(blob.pBlobData, data, size);
+  vt = VT_BLOB;
+  wReserved1 = 0;
+  return S_OK;
+}
+
 #define SET_PROP_id_dest(id, dest) \
   if (vt != id) { InternalClear(); vt = id; } dest = value; wReserved1 = 0;
 

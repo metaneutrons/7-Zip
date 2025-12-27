@@ -30,3 +30,8 @@
 *.exe
 *.out
 *.app
+
+
+# Build directories
+CPP/7zip/Bundles/*/b/
+*/_o/

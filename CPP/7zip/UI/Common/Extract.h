@@ -32,6 +32,13 @@ struct CExtractOptionsBase
   FString OutputDir;
   UString HashDir;
 
+  // Digital signature verification level:
+  // 0=strict (default), 1=mixed, 2=permissive, 3=warn
+  int DigSigVerify;
+  UString DigSigTrustStore;
+  // Revocation mode: 0=soft (default), 1=hard, 2=off
+  int DigSigRevocation;
+
   CExtractOptionsBase():
       ExcludeDirItems(false),
       ExcludeFileItems(false),
@@ -39,7 +46,9 @@ struct CExtractOptionsBase
       OverwriteMode_Force(false),
       PathMode(NExtract::NPathMode::kFullPaths),
       OverwriteMode(NExtract::NOverwriteMode::kAsk),
-      ZoneMode(NExtract::NZoneIdMode::kNone)
+      ZoneMode(NExtract::NZoneIdMode::kNone),
+      DigSigVerify(0),
+      DigSigRevocation(0)
       {}
 };
 

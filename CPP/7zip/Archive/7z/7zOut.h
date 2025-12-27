@@ -146,6 +146,11 @@ struct CArchiveDatabaseOut: public COutFolders
   CUInt32DefVector Attrib;
   CBoolVector IsAnti;
 
+  // Digital signature data
+  CByteBuffer ArchiveSignature;
+  CByteBuffer CertificateStore;
+  CObjectVector<CByteBuffer> FileSignatures;
+
   /*
   CBoolVector IsAux;
 
@@ -177,6 +182,7 @@ struct CArchiveDatabaseOut: public COutFolders
     StartPos.Clear();
     Attrib.Clear();
     IsAnti.Clear();
+    FileSignatures.Clear();
 
     /*
     IsAux.Clear();

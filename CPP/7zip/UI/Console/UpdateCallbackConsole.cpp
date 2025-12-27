@@ -785,6 +785,7 @@ HRESULT CUpdateCallbackConsole::ReportUpdateOperation(UInt32 op, const wchar_t *
     case NUpdateNotifyOp::kDelete:    s = "D"; requiredLevel = 3; break;
     case NUpdateNotifyOp::kHeader:    s = "Header creation"; requiredLevel = 100; break;
     case NUpdateNotifyOp::kInFileChanged: s = "Size of input file was changed:"; requiredLevel = 10; break;
+    case NUpdateNotifyOp::kSignatureRemoved: s = "WARNING: Digital signature removed (no signing keys provided)"; requiredLevel = 0; break;
     // case NUpdateNotifyOp::kOpFinished:  s = "Finished"; requiredLevel = 100; break;
     default:
     {

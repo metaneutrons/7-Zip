@@ -420,13 +420,28 @@ void CInArchive::Close()
   ThereIsHeaderError = false;
 }
 
-void CInArchive::ReadArchiveProperties(CInArchiveInfo & /* archiveInfo */)
+void CInArchive::ReadArchiveProperties(CInArchiveInfo &archiveInfo)
 {
   for (;;)
   {
-    if (ReadID() == NID::kEnd)
+    const UInt64 type = ReadID();
+    if (type == NID::kEnd)
       break;
-    SkipData();
+    const UInt64 size = ReadNumber();
+    if (type == NID::kArchiveSignature)
+    {
+      archiveInfo.ArchiveSignature.Alloc((size_t)size);
+      ReadBytes(archiveInfo.ArchiveSignature, (size_t)size);
+    }
+    else if (type == NID::kCertificateStore)
+    {
+      archiveInfo.CertificateStore.Alloc((size_t)size);
+      ReadBytes(archiveInfo.CertificateStore, (size_t)size);
+    }
+    else
+    {
+      SkipData(size);
+    }
   }
 }
 
@@ -1438,6 +1453,29 @@ HRESULT CInArchive::ReadHeader(
         break;
       }
       */
+      case NID::kFileSignature:
+      {
+        // Read per-file signatures
+        // Format: bool vector (numFiles bits), then for each true: size + data
+        CBoolVector sigDefs;
+        ReadBoolVector(numFiles, sigDefs);
+        db.FileSignatures.Clear();
+        db.FileSignatures.ClearAndReserve(numFiles);
+        for (unsigned i = 0; i < numFiles; i++)
+          db.FileSignatures.AddNew();
+        for (unsigned i = 0; i < numFiles; i++)
+        {
+          if (i < sigDefs.Size() && sigDefs[i])
+          {
+            const UInt64 sigSize = ReadNumber();
+            if (sigSize > ((UInt32)1 << 24)) // sanity check
+              ThrowIncorrect();
+            db.FileSignatures[i].Alloc((size_t)sigSize);
+            ReadBytes(db.FileSignatures[i], (size_t)sigSize);
+          }
+        }
+        break;
+      }
       default:
         addPropIdToList = isKnownType = false;
     }
@@ -1456,7 +1494,14 @@ HRESULT CInArchive::ReadHeader(
       ThrowIncorrect();
   }
 
-  type = ReadID(); // Read (NID::kEnd) end of headers
+  type = ReadID(); // Read (NID::kEnd) end of headers or archive properties
+  
+  // Check for digital signature properties before final kEnd
+  if (type == NID::kArchiveProperties)
+  {
+    ReadArchiveProperties(db.ArcInfo);
+    type = ReadID(); // Should be kEnd now
+  }
 
   if (numFiles - numEmptyStreams != unpackSizes.Size())
     ThrowUnsupported();

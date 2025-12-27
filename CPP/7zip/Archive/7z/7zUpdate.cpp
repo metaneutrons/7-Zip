@@ -3,6 +3,7 @@
 #include "StdAfx.h"
 
 #include "../../../../C/CpuArch.h"
+#include "../../../../C/Sha256.h"
 
 #include "../../../Common/MyLinux.h"
 #include "../../../Common/StringToInt.h"
@@ -13,6 +14,7 @@
 #include "../../Common/ProgressUtils.h"
 
 #include "../../Compress/CopyCoder.h"
+#include "../../Crypto/7zSignature.h"
 
 #include "../Common/ItemNameUtils.h"
 
@@ -2308,6 +2310,7 @@ HRESULT Update(
       file.Parent = ui.ParentFolderIndex;
       */
       newDatabase.AddFile(file, file2, name);
+      newDatabase.FileSignatures.AddNew(); // No signature for empty files
     }
   }
 
@@ -2691,6 +2694,11 @@ HRESULT Update(
               newDatabase.SecureIDs.Add(ui.SecureIndex);
             */
             newDatabase.AddFile(file, file2, name);
+            // Copy existing signature if present
+            if (fi < db->FileSignatures.Size() && db->FileSignatures[fi].Size() > 0)
+              newDatabase.FileSignatures.Add(db->FileSignatures[fi]);
+            else
+              newDatabase.FileSignatures.AddNew();
           }
         }
       }
@@ -2734,6 +2742,26 @@ HRESULT Update(
         return E_FAIL;
       newDatabase.Files.Add(file);
       */
+    }
+    
+    // Create signature handler for per-file signing if certificate provided
+    // DigSigLevel: 0=both, 1=archive-only, 2=file-only
+    NCrypto::CSignatureHandler *fileSigHandler = NULL;
+    if (!options.DigSigCert.IsEmpty() && options.DigSigLevel != 1)
+    {
+      fileSigHandler = new NCrypto::CSignatureHandler();
+      if (!options.DigSigPass.IsEmpty())
+        fileSigHandler->SetPassword(options.DigSigPass);
+      HRESULT hr = fileSigHandler->LoadOrSelectIdentity(options.DigSigCert, options.DigSigKey);
+      if (hr == S_OK && !options.DigSigAlgo.IsEmpty())
+        hr = fileSigHandler->SetSignatureAlgorithm(options.DigSigAlgo);
+      if (hr != S_OK)
+      {
+        delete fileSigHandler;
+        fileSigHandler = NULL;
+        // Return specific error instead of generic E_FAIL
+        return hr;
+      }
     }
     
     for (i = 0; i < numFiles;)
@@ -2787,6 +2815,8 @@ HRESULT Update(
       inStreamSpec->Need_MTime = options.Need_MTime;
       inStreamSpec->Need_Attrib = options.Need_Attrib;
       // inStreamSpec->Need_Crc = options.Need_Crc;
+      // DigSigLevel: 0=both, 1=archive-only, 2=file-only
+      inStreamSpec->Need_Sha256 = !options.DigSigCert.IsEmpty() && options.DigSigLevel != 1;
 
       inStreamSpec->Init(updateCallback, &indices[i], numSubFiles);
       
@@ -2917,6 +2947,22 @@ HRESULT Update(
 
         // numProcessedFiles++;
         newDatabase.AddFile(file, file2, name);
+        
+        // Sign file hash if signing enabled
+        if (fileSigHandler && inStreamSpec->Need_Sha256 && 
+            subIndex < inStreamSpec->Sha256Digests.Size())
+        {
+          const CByteBuffer &hash = inStreamSpec->Sha256Digests[subIndex];
+          CByteBuffer sig;
+          if (fileSigHandler->Sign(hash, hash.Size(), sig) == S_OK)
+            newDatabase.FileSignatures.Add(sig);
+          else
+            newDatabase.FileSignatures.AddNew(); // Empty signature on failure
+        }
+        else
+        {
+          newDatabase.FileSignatures.AddNew(); // No signature
+        }
       }
 
       /*
@@ -3029,6 +3075,8 @@ HRESULT Update(
       }
       */
     }
+    
+    delete fileSigHandler;
   }
 
   RINOK(lps->SetCur())
@@ -3075,6 +3123,88 @@ HRESULT Update(
 
   if (opCallback)
     RINOK(opCallback->ReportOperation(NEventIndexType::kNoIndex, (UInt32)(Int32)-1, NUpdateNotifyOp::kHeader))
+
+  // Sign archive if certificate provided and level allows it
+  // DigSigLevel: 0=both, 1=archive-only, 2=file-only
+  if (!options.DigSigCert.IsEmpty() && options.DigSigLevel != 2)
+  {
+    // Hash header content for comprehensive coverage
+    // Must match verification hash computation exactly
+    CSha256 sha;
+    Sha256_Init(&sha);
+    
+    // Hash pack sizes
+    for (unsigned i = 0; i < newDatabase.PackSizes.Size(); i++)
+    {
+      UInt64 size = newDatabase.PackSizes[i];
+      Sha256_Update(&sha, (const Byte *)&size, sizeof(size));
+    }
+    
+    // Hash file count
+    UInt32 numFiles = newDatabase.Files.Size();
+    Sha256_Update(&sha, (const Byte *)&numFiles, sizeof(numFiles));
+    
+    // Hash file metadata
+    for (unsigned i = 0; i < newDatabase.Files.Size(); i++)
+    {
+      const CFileItem &file = newDatabase.Files[i];
+      Sha256_Update(&sha, (const Byte *)&file.Size, sizeof(file.Size));
+      Sha256_Update(&sha, (const Byte *)&file.Crc, sizeof(file.Crc));
+      Byte flags = (file.HasStream ? 1 : 0) | (file.IsDir ? 2 : 0) | (file.CrcDefined ? 4 : 0);
+      Sha256_Update(&sha, &flags, 1);
+      
+      // Hash filename (UTF-16)
+      const UString &name = newDatabase.Names[i];
+      for (unsigned j = 0; j <= name.Len(); j++)
+      {
+        UInt16 c = (j < name.Len()) ? (UInt16)name[j] : 0;
+        Sha256_Update(&sha, (const Byte *)&c, sizeof(c));
+      }
+    }
+    
+    // Hash timestamps
+    for (unsigned i = 0; i < newDatabase.MTime.Vals.Size(); i++)
+    {
+      UInt64 mtime = newDatabase.MTime.Vals[i];
+      Sha256_Update(&sha, (const Byte *)&mtime, sizeof(mtime));
+    }
+    
+    // Hash attributes
+    for (unsigned i = 0; i < newDatabase.Attrib.Vals.Size(); i++)
+    {
+      UInt32 attr = newDatabase.Attrib.Vals[i];
+      Sha256_Update(&sha, (const Byte *)&attr, sizeof(attr));
+    }
+    
+    // Include file signatures for cryptographic binding
+    for (unsigned i = 0; i < newDatabase.FileSignatures.Size(); i++)
+    {
+      if (newDatabase.FileSignatures[i].Size() > 0)
+        Sha256_Update(&sha, newDatabase.FileSignatures[i], newDatabase.FileSignatures[i].Size());
+    }
+    
+    Byte digest[SHA256_DIGEST_SIZE];
+    Sha256_Final(&sha, digest);
+    
+    NCrypto::CSignatureHandler sigHandler;
+    if (!options.DigSigPass.IsEmpty())
+      sigHandler.SetPassword(options.DigSigPass);
+    HRESULT hr = sigHandler.LoadOrSelectIdentity(options.DigSigCert, options.DigSigKey);
+    if (FAILED(hr))
+      return hr;  // Return specific error instead of generic E_FAIL
+    if (!options.DigSigAlgo.IsEmpty())
+    {
+      hr = sigHandler.SetSignatureAlgorithm(options.DigSigAlgo);
+      if (FAILED(hr))
+        return hr;
+    }
+    hr = sigHandler.Sign(digest, SHA256_DIGEST_SIZE, newDatabase.ArchiveSignature);
+    if (FAILED(hr))
+      return hr;  // Fail if signing fails
+    sigHandler.GetCertificateChain(newDatabase.CertificateStore);
+  }
+  // Note: if sourceWasSigned but no signing keys, warning was already reported
+  // and newDatabase signatures remain empty (signature removed)
 
   RINOK(archive.WriteDatabase(EXTERNAL_CODECS_LOC_VARS
       newDatabase, options.HeaderMethod, options.HeaderOptions))

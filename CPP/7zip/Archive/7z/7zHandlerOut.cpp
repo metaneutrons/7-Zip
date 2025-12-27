@@ -804,6 +804,27 @@ Z7_COM7F_IMF(CHandler::UpdateItems(ISequentialOutStream *outStream, UInt32 numIt
 
   options.MultiThreadMixer = _useMultiThreadMixer;
 
+  // Digital signature options
+  options.DigSigCert = _digSigCert;
+  options.DigSigKey = _digSigKey;
+  options.DigSigAlgo = _digSigAlgo;
+  options.DigSigPass = _digSigPass;
+  options.DigSigLevel = _digSigLevel;
+  
+  // Warn if modifying signed archive without signing keys
+  bool sourceWasSigned = (db && (db->ArcInfo.ArchiveSignature.Size() > 0 || 
+                                  db->FileSignatures.Size() > 0));
+  if (sourceWasSigned && _digSigCert.IsEmpty())
+  {
+    // Report warning via callback - signature will be removed
+    Z7_DECL_CMyComPtr_QI_FROM(IArchiveUpdateCallbackFile, opCallback, updateCallback)
+    if (opCallback)
+    {
+      opCallback->ReportOperation(NEventIndexType::kNoIndex, (UInt32)(Int32)-1, 
+                                   NUpdateNotifyOp::kSignatureRemoved);
+    }
+  }
+
   /*
   if (secureBlocks.Sorted.Size() > 1)
   {
@@ -874,6 +895,8 @@ void COutHandler::InitProps7z()
   _decoderCompatibilityVersion = k_decoderCompatibilityVersion;
   _enabledFilters.Clear();
   _disabledFilters.Clear();
+  
+  _digSigLevel = 0;
 }
 
 void COutHandler::InitProps()
@@ -985,6 +1008,7 @@ static const C_Id_Name_pair g_filter_pairs[] =
 
 HRESULT COutHandler::SetProperty(const wchar_t *nameSpec, const PROPVARIANT &value)
 {
+  
   UString name = nameSpec;
   name.MakeLower_Ascii();
   if (name.IsEmpty())
@@ -1042,6 +1066,40 @@ HRESULT COutHandler::SetProperty(const wchar_t *nameSpec, const PROPVARIANT &val
     if (name.IsEqualTo("mtf")) return PROPVARIANT_to_bool(value, _useMultiThreadMixer);
 
     if (name.IsEqualTo("qs")) return PROPVARIANT_to_bool(value, _useTypeSorting);
+
+    // Digital signature properties
+    if (name.IsEqualTo("dsc"))
+    {
+      if (value.vt != VT_BSTR) {
+        return E_INVALIDARG;
+      }
+      _digSigCert = value.bstrVal;
+      return S_OK;
+    }
+    if (name.IsEqualTo("dsk"))
+    {
+      if (value.vt != VT_BSTR) return E_INVALIDARG;
+      _digSigKey = value.bstrVal;
+      return S_OK;
+    }
+    if (name.IsEqualTo("dsa"))
+    {
+      if (value.vt != VT_BSTR) return E_INVALIDARG;
+      _digSigAlgo = value.bstrVal;
+      return S_OK;
+    }
+    if (name.IsEqualTo("dsp"))
+    {
+      if (value.vt != VT_BSTR) return E_INVALIDARG;
+      _digSigPass = value.bstrVal;
+      return S_OK;
+    }
+    if (name.IsEqualTo("dsl"))
+    {
+      if (value.vt != VT_UI4) return E_INVALIDARG;
+      _digSigLevel = (int)value.ulVal;
+      return S_OK;
+    }
 
     if (name.IsPrefixedBy_Ascii_NoCase("yv"))
     {

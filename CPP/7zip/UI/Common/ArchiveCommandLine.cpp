@@ -210,9 +210,22 @@ enum Enum
   #ifndef Z7_NO_CRYPTO
   , kPassword
   #endif
+
+  , kDigSigCert
+  , kDigSigKey
+  , kDigSigTrust
+  , kDigSigAlgo
+  , kDigSigPass
+  , kDigSigLevel
+  , kDigSigVerify
+  , kDigSigRevHard
+  , kDigSigRevOff
 };
 
 }
+
+static const char * const kDigSigLevelPostCharSet = "afb";
+static const char * const kDigSigVerifyPostCharSet = "0123smpw";
 
 
 static const wchar_t kRecursedIDChar = 'r';
@@ -361,6 +374,16 @@ static const CSwitchForm kSwitchForms[] =
   #ifndef Z7_NO_CRYPTO
   , { "p", SWFRM_STRING }
   #endif
+
+  , { "dsc", SWFRM_STRING_SINGL(1) }
+  , { "dsk", SWFRM_STRING_SINGL(1) }
+  , { "dst", SWFRM_STRING_SINGL(1) }
+  , { "dsa", SWFRM_STRING_SINGL(1) }
+  , { "dsp", SWFRM_STRING_SINGL(1) }
+  , { "dsl", NSwitchType::kChar, false, 1, kDigSigLevelPostCharSet }
+  , { "dsv", NSwitchType::kChar, false, 1, kDigSigVerifyPostCharSet }
+  , { "dsrh", SWFRM_SIMPLE }
+  , { "dsr0", SWFRM_SIMPLE }
 };
 
 static const char * const kUniversalWildcard = "*";
@@ -1461,6 +1484,90 @@ void CArcCmdLineParser::Parse2(CArcCmdLineOptions &options)
   if (options.PasswordEnabled)
     options.Password = parser[NKey::kPassword].PostStrings[0];
   #endif
+
+  // Digital signature switches
+  if (parser[NKey::kDigSigCert].ThereIs)
+  {
+    UString certPath = parser[NKey::kDigSigCert].PostStrings[0];
+    // Remove leading '=' if present (command line parsing artifact)
+    if (!certPath.IsEmpty() && certPath[0] == L'=')
+      certPath.Delete(0);
+    options.UpdateOptions.DigSigCert = certPath;
+    CProperty prop;
+    prop.Name = L"dsc";
+    prop.Value = certPath;
+    options.Properties.Add(prop);
+  }
+  if (parser[NKey::kDigSigKey].ThereIs)
+  {
+    UString keyPath = parser[NKey::kDigSigKey].PostStrings[0];
+    // Remove leading '=' if present (command line parsing artifact)
+    if (!keyPath.IsEmpty() && keyPath[0] == L'=')
+      keyPath.Delete(0);
+    options.UpdateOptions.DigSigKey = keyPath;
+    CProperty prop;
+    prop.Name = L"dsk";
+    prop.Value = keyPath;
+    options.Properties.Add(prop);
+  }
+  if (parser[NKey::kDigSigAlgo].ThereIs)
+  {
+    UString algo = parser[NKey::kDigSigAlgo].PostStrings[0];
+    // Remove leading '=' if present (command line parsing artifact)
+    if (!algo.IsEmpty() && algo[0] == L'=')
+      algo.Delete(0);
+    options.UpdateOptions.DigSigAlgo = algo;
+    CProperty prop;
+    prop.Name = L"dsa";
+    prop.Value = algo;
+    options.Properties.Add(prop);
+  }
+  if (parser[NKey::kDigSigPass].ThereIs)
+  {
+    UString pass = parser[NKey::kDigSigPass].PostStrings[0];
+    // Remove leading '=' if present (command line parsing artifact)
+    if (!pass.IsEmpty() && pass[0] == L'=')
+      pass.Delete(0);
+    options.UpdateOptions.DigSigPass = pass;
+    CProperty prop;
+    prop.Name = L"dsp";
+    prop.Value = pass;
+    options.Properties.Add(prop);
+  }
+  if (parser[NKey::kDigSigLevel].ThereIs)
+  {
+    options.UpdateOptions.DigSigLevel = parser[NKey::kDigSigLevel].PostCharIndex;
+    CProperty prop;
+    prop.Name = L"dsl";
+    prop.Value.Empty();
+    prop.Value += (wchar_t)('0' + parser[NKey::kDigSigLevel].PostCharIndex);
+    options.Properties.Add(prop);
+  }
+  if (parser[NKey::kDigSigTrust].ThereIs)
+  {
+    UString trustStore = parser[NKey::kDigSigTrust].PostStrings[0];
+    // Remove leading '=' if present (command line parsing artifact)
+    if (!trustStore.IsEmpty() && trustStore[0] == L'=')
+      trustStore.Delete(0);
+    options.ExtractOptions.DigSigTrustStore = trustStore;
+    // Add as property so it's passed to archive handler
+    CProperty prop;
+    prop.Name = L"dst";
+    prop.Value = trustStore;
+    options.Properties.Add(prop);
+  }
+  if (parser[NKey::kDigSigVerify].ThereIs)
+  {
+    // Map char index to level: 0-3 direct, s=0, m=1, p=2, w=3
+    int idx = parser[NKey::kDigSigVerify].PostCharIndex;
+    int level = (idx < 4) ? idx : (idx - 4);
+    options.ExtractOptions.DigSigVerify = level;
+  }
+  // Revocation mode: 0=soft (default), 1=hard, 2=off
+  if (parser[NKey::kDigSigRevHard].ThereIs)
+    options.ExtractOptions.DigSigRevocation = 1;
+  else if (parser[NKey::kDigSigRevOff].ThereIs)
+    options.ExtractOptions.DigSigRevocation = 2;
 
   options.ShowDialog = parser[NKey::kShowDialog].ThereIs;
 

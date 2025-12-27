@@ -142,7 +142,10 @@ namespace NArchive
         kDataAfterEnd,
         kIsNotArc,
         kHeadersError,
-        kWrongPassword
+        kWrongPassword,
+        kSignatureFailed,
+        kUntrustedCert,
+        kExpiredCert
         // , kMemError
       };
     }
@@ -470,7 +473,8 @@ namespace NUpdateNotifyOp
     kDelete,
     kHeader,
     kHashRead,
-    kInFileChanged
+    kInFileChanged,
+    kSignatureRemoved
     // , kOpFinished
     // , kNumDefined
   };

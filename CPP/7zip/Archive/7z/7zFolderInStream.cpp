@@ -27,6 +27,8 @@ void CFolderInStream::Init(IArchiveUpdateCallback *updateCallback,
   CTimes.ClearAndReserve(Need_CTime ? numFiles : (unsigned)0);
   ATimes.ClearAndReserve(Need_ATime ? numFiles : (unsigned)0);
   Attribs.ClearAndReserve(Need_Attrib ? numFiles : (unsigned)0);
+  if (Need_Sha256)
+    Sha256Digests.ClearAndReserve(numFiles);
 
   // FolderCrc = CRC_INIT_VAL;
   _stream.Release();
@@ -36,7 +38,7 @@ void CFolderInStream::ClearFileInfo()
 {
   _pos = 0;
   _crc = CRC_INIT_VAL;
-  _size_Defined = false;
+  Sha256_Init(&_sha256);  _size_Defined = false;
   _times_Defined = false;
   _size = 0;
   FILETIME_Clear(_mTime);
@@ -129,7 +131,12 @@ HRESULT CFolderInStream::AddFileInfo(bool isProcessed)
   if (Need_MTime) AddFt(MTimes, _mTime);
   if (Need_CTime) AddFt(CTimes, _cTime);
   if (Need_ATime) AddFt(ATimes, _aTime);
-  ClearFileInfo();
+  if (Need_Sha256)
+  {
+    CByteBuffer &digest = Sha256Digests.AddNew();
+    digest.Alloc(SHA256_DIGEST_SIZE);
+    Sha256_Final(&_sha256, digest);
+  }  ClearFileInfo();
   /*
   if (isProcessed && _reportArcProp)
     RINOK(ReportItemProps(_reportArcProp, index, _pos, &crc))
@@ -175,7 +182,8 @@ Z7_COM7F_IMF(CFolderInStream::Read(void *data, UInt32 size, UInt32 *processedSiz
       {
         // if (Need_Crc)
         _crc = CrcUpdate(_crc, data, cur);
-        /*
+        if (Need_Sha256)
+          Sha256_Update(&_sha256, (const Byte *)data, cur);        /*
         if (FolderCrc)
           FolderCrc = CrcUpdate(FolderCrc, data, cur);
         */

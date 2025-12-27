@@ -202,7 +202,18 @@ static const char * const kHelpString =
     "  -v{Size}[b|k|m|g] : Create volumes\n"
     "  -w[{path}] : assign Work directory. Empty path means a temporary directory\n"
     "  -x[r[-|0]][m[-|2]][w[-]]{@listfile|!wildcard} : eXclude filenames\n"
-    "  -y : assume Yes on all queries\n";
+    "  -y : assume Yes on all queries\n"
+    "\n"
+    "<Digital Signature Switches>\n"
+    "  -dsc{cert}  : set signing Certificate: file path (.pfx/.p12),\n"
+    "                or name/sha1:thumbprint for keychain (macOS/Windows)\n"
+    "  -dsk{path}  : set signing private Key (optional if PFX)\n"
+    "  -dst{path}  : set Trust store for verification (CA cert file)\n"
+    "  -dsa{algo}  : set signature Algorithm (sha256/sha384/sha512)\n"
+    "  -dsl{a|f|b} : signature Level: a=archive, f=files, b=both (default)\n"
+    "  -dsv{0-3}   : Verification level: 0=strict, 1=mixed, 2=permissive, 3=warn\n"
+    "  -dsrh       : Hard-fail revocation (fail if can't verify)\n"
+    "  -dsr0       : disable revocation checking (default: soft-fail)\n";
 
 // ---------------------------
 // exception messages
@@ -813,6 +824,7 @@ int Main2(
   #endif
 )
 {
+  
   #if defined(MY_CPU_SIZEOF_POINTER)
     { unsigned k = sizeof(void *); if (k != MY_CPU_SIZEOF_POINTER) throw "incorrect MY_CPU_PTR_SIZE"; }
   #endif

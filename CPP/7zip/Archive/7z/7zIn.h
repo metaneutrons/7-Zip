@@ -125,6 +125,9 @@ struct CDatabase: public CFolders
 
   CByteBuffer NamesBuf;
   CObjArray<size_t> NameOffsets; // numFiles + 1, offsets of utf-16 symbols
+  
+  // Per-file digital signatures
+  CObjectVector<CByteBuffer> FileSignatures;
 
   /*
   void ClearSecure()
@@ -149,6 +152,7 @@ struct CDatabase: public CFolders
     StartPos.Clear();
     Attrib.Clear();
     IsAnti.Clear();
+    FileSignatures.Clear();
     // IsAux.Clear();
   }
 
@@ -184,6 +188,10 @@ struct CInArchiveInfo
   UInt64 DataStartPosition2;          // in stream. it's for headers
   CRecordVector<UInt64> FileInfoPopIDs;
   
+  // Digital signature data
+  CByteBuffer ArchiveSignature;
+  CByteBuffer CertificateStore;
+  
   void Clear()
   {
     StartPosition = 0;
@@ -191,6 +199,8 @@ struct CInArchiveInfo
     DataStartPosition = 0;
     DataStartPosition2 = 0;
     FileInfoPopIDs.Clear();
+    ArchiveSignature.Free();
+    CertificateStore.Free();
   }
 };
 
