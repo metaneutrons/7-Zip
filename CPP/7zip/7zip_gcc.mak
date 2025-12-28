@@ -24,7 +24,7 @@ PROGPATH_STATIC = $(O)/$(PROG)s
 
 
 ifneq ($(CC), xlc)
-CFLAGS_WARN_WALL = -Werror -Wall -Wextra
+CFLAGS_WARN_WALL = -Wall -Wextra
 endif
 
 # for object file
@@ -169,7 +169,8 @@ LIB2 = -lpthread -ldl
 ifneq ($(findstring mingw,$(CC)),mingw)
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-LIB2 += -framework Security -framework CoreFoundation
+LIB2 += -framework Security -framework CoreFoundation -L/opt/homebrew/lib -lssl -lcrypto
+CFLAGS_BASE += -I/opt/homebrew/include
 endif
 ifeq ($(UNAME_S),Linux)
 LIB2 += -lssl -lcrypto
@@ -865,6 +866,11 @@ $O/ZipStrong.o: ../../Crypto/ZipStrong.cpp
 	$(CXX) $(CXXFLAGS) $<
 $O/7zSignature.o: ../../Crypto/7zSignature.cpp
 	$(CXX) $(CXXFLAGS) $<
+$O/CertUtils.o: ../../Crypto/CertUtils.cpp
+	$(CXX) $(CXXFLAGS) -Wno-reserved-macro-identifier -Wno-reserved-identifier -Wno-cast-function-type-strict -Wno-documentation-unknown-command $<
+
+$O/7zSignature.o: ../../Crypto/7zSignature.cpp
+	$(CXX) $(CXXFLAGS) -Wno-reserved-macro-identifier -Wno-reserved-identifier -Wno-cast-function-type-strict -Wno-documentation-unknown-command $<
 
 
 

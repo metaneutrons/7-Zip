@@ -299,6 +299,7 @@ CRYPTO_OBJS = \
   $O/7zAes.o \
   $O/7zAesRegister.o \
   $O/7zSignature.o \
+  $O/CertUtils.o \
   $O/HmacSha1.o \
   $O/HmacSha256.o \
   $O/MyAes.o \

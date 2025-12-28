@@ -855,6 +855,7 @@ Z7_COM7F_IMF(CHandler::Open(IInStream *stream,
         }
         
         // Include file signatures for cryptographic binding
+        // Include file signatures for cryptographic binding (must match signing)
         for (unsigned i = 0; i < _db.FileSignatures.Size(); i++)
         {
           if (_db.FileSignatures[i].Size() > 0)

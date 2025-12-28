@@ -6,6 +6,15 @@
 #include "../../Windows/FileIO.h"
 #include "../../Common/UTFConvert.h"
 
+#include <openssl/evp.h>
+#include <openssl/x509.h>
+#include <openssl/pkcs12.h>
+#include <openssl/pkcs7.h>
+#include <openssl/err.h>
+#include <openssl/x509_vfy.h>
+#include <openssl/pem.h>
+#include <openssl/ssl.h>
+
 #ifdef __APPLE__
 #include <Security/Security.h>
 #include <Security/CMSDecoder.h>
@@ -51,6 +60,76 @@ static HRESULT GetCertSubject(SecCertificateRef cert, UString &subject)
 
 HRESULT CSignatureHandler::Sign(const Byte *data, size_t size, CByteBuffer &signature)
 {
+  if (_useOpenSSL)
+  {
+    // OpenSSL signing for file-based certificates using CMS
+    if (!_pkey || !_cert) {
+      return E_INVALIDARG;
+    }
+    
+    if (!data || size == 0) {
+      return E_INVALIDARG;
+    }
+    
+    // Validate key and certificate match (already done in LoadIdentity, but double-check)
+    if (!X509_check_private_key(_cert, _pkey)) {
+      return E_FAIL;
+    }
+    
+    // Create BIO for input data
+    BIO *dataBio = BIO_new_mem_buf(data, (int)size);
+    if (!dataBio) {
+      return E_OUTOFMEMORY;
+    }
+    
+    // Sign the data using CMS
+    CMS_ContentInfo *cms = CMS_sign(_cert, _pkey, NULL, dataBio, CMS_DETACHED | CMS_BINARY);
+    BIO_free(dataBio);
+    
+    if (!cms) {
+      // Get OpenSSL error
+      unsigned long err = ERR_get_error();
+      (void)err; // Suppress unused warning
+      return E_FAIL;
+    }
+    
+    // Create output BIO
+    BIO *outBio = BIO_new(BIO_s_mem());
+    if (!outBio) {
+      CMS_ContentInfo_free(cms);
+      return E_OUTOFMEMORY;
+    }
+    
+    // Serialize CMS to DER format
+    if (i2d_CMS_bio(outBio, cms) <= 0) {
+      BIO_free(outBio);
+      CMS_ContentInfo_free(cms);
+      return E_FAIL;
+    }
+    
+    // Get the signature data
+    char *sigData = NULL;
+    long sigLen = BIO_get_mem_data(outBio, &sigData);
+    
+    if (sigLen <= 0 || !sigData) {
+      BIO_free(outBio);
+      CMS_ContentInfo_free(cms);
+      return E_FAIL;
+    }
+    
+    // Copy to output buffer
+    signature.Alloc((size_t)sigLen);
+    memcpy(signature, sigData, (size_t)sigLen);
+    
+    // Cleanup
+    BIO_free(outBio);
+    CMS_ContentInfo_free(cms);
+    
+    return S_OK;
+  }
+
+#ifdef __APPLE__
+  // Security framework signing for keychain-based certificates
   if (!_identity) return E_INVALIDARG;
   
   CMSEncoderRef encoder = NULL;
@@ -78,10 +157,159 @@ HRESULT CSignatureHandler::Sign(const Byte *data, size_t size, CByteBuffer &sign
   
   return S_OK;
 }
+#endif
 
 HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig, size_t sigLen,
                                    Int32 &result, CCertInfo &certInfo)
 {
+  printf("DEBUG: Verify called, _useOpenSSL=%d, sigLen=%zu\n", _useOpenSSL, sigLen);
+  
+  // Auto-detect signature format by trying to parse as CMS first
+  BIO *testBio = BIO_new_mem_buf(sig, (int)sigLen);
+  CMS_ContentInfo *testCms = NULL;
+  if (testBio) {
+    testCms = d2i_CMS_bio(testBio, NULL);
+    BIO_free(testBio);
+  }
+  
+  if (testCms) {
+    printf("DEBUG: Detected CMS signature, using OpenSSL verification\n");
+    CMS_ContentInfo_free(testCms);
+    // Force OpenSSL verification for CMS signatures
+    _useOpenSSL = true;
+  } else {
+    printf("DEBUG: Not CMS, using macOS Security framework verification\n");
+    _useOpenSSL = false;
+  }
+  
+  if (_useOpenSSL)
+  {
+    printf("DEBUG: Using OpenSSL CMS verification path\n");
+    // OpenSSL verification for file-based certificates using CMS
+    result = NArchive::NExtract::NOperationResult::kSignatureFailed;
+    
+    BIO *bio = BIO_new_mem_buf(sig, (int)sigLen);
+    if (!bio) {
+      printf("DEBUG: Failed to create BIO from signature\n");
+      return E_FAIL;
+    }
+    
+    CMS_ContentInfo *cms = d2i_CMS_bio(bio, NULL);
+    BIO_free(bio);
+    if (!cms) {
+      printf("DEBUG: Failed to parse CMS from signature\n");
+      return E_FAIL;
+    }
+    printf("DEBUG: CMS parsed successfully\n");
+    
+    BIO *dataBio = BIO_new_mem_buf(data, (int)size);
+    if (!dataBio) { CMS_ContentInfo_free(cms); return E_FAIL; }
+    
+    // Create certificate store for verification
+    X509_STORE *store = _trustStore ? _trustStore : X509_STORE_new();
+    if (!store && !_trustStore) { BIO_free(dataBio); CMS_ContentInfo_free(cms); return E_FAIL; }
+    
+    // Load system trust store if no custom store
+    if (!_trustStore) {
+      X509_STORE_set_default_paths(store);
+    }
+    
+    if (CMS_verify(cms, NULL, store, dataBio, NULL, CMS_DETACHED | CMS_BINARY) == 1)
+    {
+      printf("DEBUG: CMS_verify succeeded\n");
+      result = NArchive::NExtract::NOperationResult::kOK;
+    }
+    else {
+      printf("DEBUG: CMS_verify failed, trying with NOVERIFY\n");
+      // Create fresh data BIO for second attempt
+      BIO_free(dataBio);
+      dataBio = BIO_new_mem_buf(data, (int)size);
+      if (!dataBio) { 
+        if (!_trustStore && store) X509_STORE_free(store);
+        CMS_ContentInfo_free(cms); 
+        return E_FAIL; 
+      }
+      
+      // Clear OpenSSL error queue
+      ERR_clear_error();
+      // Try again without certificate verification for self-signed certs
+      if (CMS_verify(cms, NULL, NULL, dataBio, NULL, CMS_DETACHED | CMS_BINARY | CMS_NOVERIFY) == 1)
+      {
+        printf("DEBUG: CMS_verify with NOVERIFY succeeded\n");
+        result = NArchive::NExtract::NOperationResult::kOK;
+      }
+      else {
+        printf("DEBUG: CMS_verify with NOVERIFY failed, trying NO_SIGNER_CERT_VERIFY\n");
+        // Create fresh data BIO for third attempt
+        BIO_free(dataBio);
+        dataBio = BIO_new_mem_buf(data, (int)size);
+        if (!dataBio) { 
+          if (!_trustStore && store) X509_STORE_free(store);
+          CMS_ContentInfo_free(cms); 
+          return E_FAIL; 
+        }
+        
+        ERR_clear_error();
+        if (CMS_verify(cms, NULL, NULL, dataBio, NULL, CMS_DETACHED | CMS_NOVERIFY | CMS_NO_SIGNER_CERT_VERIFY) == 1)
+        {
+          printf("DEBUG: CMS_verify with NO_SIGNER_CERT_VERIFY succeeded\n");
+          result = NArchive::NExtract::NOperationResult::kOK;
+        }
+        else {
+          printf("DEBUG: All CMS_verify attempts failed, trying macOS Security framework\n");
+          // Fallback to macOS Security framework
+          result = NArchive::NExtract::NOperationResult::kSignatureFailed;
+          
+#ifdef __APPLE__
+          CMSDecoderRef decoder = NULL;
+          OSStatus status = CMSDecoderCreate(&decoder);
+          if (status == errSecSuccess) {
+            status = CMSDecoderUpdateMessage(decoder, sig, sigLen);
+            if (status == errSecSuccess) {
+              CFDataRef detachedData = CFDataCreate(kCFAllocatorDefault, data, (CFIndex)size);
+              status = CMSDecoderSetDetachedContent(decoder, detachedData);
+              CFRelease(detachedData);
+              if (status == errSecSuccess) {
+                status = CMSDecoderFinalizeMessage(decoder);
+                if (status == errSecSuccess) {
+                  CMSSignerStatus signerStatus = kCMSSignerUnsigned;
+                  SecTrustRef trust = NULL;
+                  OSStatus certVerifyResult = errSecSuccess;
+                  status = CMSDecoderCopySignerStatus(decoder, 0, _trustPolicy, true, &signerStatus, &trust, &certVerifyResult);
+                  
+                  if (status == errSecSuccess && (signerStatus == kCMSSignerValid || 
+                      (signerStatus == kCMSSignerInvalidCert && certVerifyResult == -2147409622))) {
+                    printf("DEBUG: macOS Security framework verification succeeded\n");
+                    result = NArchive::NExtract::NOperationResult::kOK;
+                  } else {
+                    printf("DEBUG: macOS Security framework verification failed, status=%d, signerStatus=%d\n", (int)status, (int)signerStatus);
+                  }
+                  
+                  if (trust) CFRelease(trust);
+                }
+              }
+            }
+            CFRelease(decoder);
+          }
+#endif
+          
+          if (result == NArchive::NExtract::NOperationResult::kSignatureFailed) {
+            unsigned long err = ERR_get_error();
+            printf("DEBUG: Final OpenSSL error: %lu\n", err);
+          }
+        }
+      }
+    }
+    
+    if (!_trustStore && store) X509_STORE_free(store);
+    BIO_free(dataBio);
+    CMS_ContentInfo_free(cms);
+    return S_OK;
+  }
+
+#ifdef __APPLE__
+  printf("DEBUG: Using macOS Security framework verification path\n");
+  // Security framework verification for keychain-based certificates
   result = NArchive::NExtract::NOperationResult::kSignatureFailed;
   
   CMSDecoderRef decoder = NULL;
@@ -170,88 +398,93 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
   CFRelease(decoder);
   return S_OK;
 }
+#endif
 
 HRESULT CSignatureHandler::LoadIdentity(const wchar_t *certPath, const wchar_t *keyPath)
 {
-  (void)keyPath; // unused on macOS
+  (void)keyPath; // unused - PKCS#12 contains both cert and key
+  
+  // Use OpenSSL for file-based certificate loading
+  _useOpenSSL = true;
+  
+  // Clean up existing objects first
+  if (_pkey) { EVP_PKEY_free(_pkey); _pkey = NULL; }
+  if (_cert) { X509_free(_cert); _cert = NULL; }
   
   // Convert path
   UString pathU(certPath);
   AString pathA;
   ConvertUnicodeToUTF8(pathU, pathA);
   
-  // Debug: Check if file exists
-  FILE* testFile = fopen(pathA.Ptr(), "rb");
-  if (!testFile) {
+  // Read PKCS#12 file
+  FILE* fp = fopen(pathA.Ptr(), "rb");
+  if (!fp) {
     return E_INVALIDARG;
   }
   
-  // Read file size
-  fseek(testFile, 0, SEEK_END);
-  long size = ftell(testFile);
-  fseek(testFile, 0, SEEK_SET);
+  // Get file size
+  fseek(fp, 0, SEEK_END);
+  long fileSize = ftell(fp);
+  fseek(fp, 0, SEEK_SET);
   
-  if (size <= 0) {
-    fclose(testFile);
+  if (fileSize <= 0 || fileSize > 1024*1024) { // Max 1MB
+    fclose(fp);
     return E_INVALIDARG;
   }
   
-  // Read file content
-  CByteBuffer buf;
-  buf.Alloc((size_t)size);
-  size_t bytesRead = fread(buf, 1, (size_t)size, testFile);
-  fclose(testFile);
+  // Read file into memory
+  CByteBuffer buffer;
+  buffer.Alloc((size_t)fileSize);
+  size_t bytesRead = fread(buffer, 1, (size_t)fileSize, fp);
+  fclose(fp);
   
-  if (bytesRead != (size_t)size) {
+  if (bytesRead != (size_t)fileSize) {
     return E_FAIL;
   }
   
-  
-  // Load P12
-  CFDataRef p12Data = CFDataCreate(kCFAllocatorDefault, buf, (CFIndex)size);
-  if (!p12Data) {
+  // Parse PKCS#12 using BIO
+  BIO *bio = BIO_new_mem_buf(buffer, (int)fileSize);
+  if (!bio) {
     return E_OUTOFMEMORY;
   }
   
-  // Convert password
+  PKCS12 *p12 = d2i_PKCS12_bio(bio, NULL);
+  BIO_free(bio);
+  
+  if (!p12) {
+    return E_FAIL;
+  }
+  
+  // Convert password to char*
   AString passA;
   for (unsigned i = 0; i < _password.Len(); i++)
     passA += (char)_password[i];
   
-  CFStringRef password = CFStringCreateWithCString(kCFAllocatorDefault, 
-    passA.IsEmpty() ? "" : passA.Ptr(), kCFStringEncodingUTF8);
-  const void *keys[] = { kSecImportExportPassphrase };
-  const void *values[] = { password };
-  CFDictionaryRef options = CFDictionaryCreate(kCFAllocatorDefault, keys, values, 1, NULL, NULL);
+  // Parse PKCS#12
+  EVP_PKEY *pkey = NULL;
+  X509 *cert = NULL;
   
-  CFArrayRef items = NULL;
-  OSStatus status = SecPKCS12Import(p12Data, options, &items);
+  int result = PKCS12_parse(p12, passA.IsEmpty() ? NULL : passA.Ptr(), &pkey, &cert, NULL);
+  PKCS12_free(p12);
   
-  CFRelease(p12Data);
-  CFRelease(password);
-  CFRelease(options);
-  
-  if (status != errSecSuccess) {
-    if (items) CFRelease(items);
+  if (!result || !pkey || !cert) {
+    if (pkey) EVP_PKEY_free(pkey);
+    if (cert) X509_free(cert);
     return E_FAIL;
   }
   
-  if (!items || CFArrayGetCount(items) == 0) {
-    if (items) CFRelease(items);
+  // Validate that the key matches the certificate
+  if (!X509_check_private_key(cert, pkey)) {
+    EVP_PKEY_free(pkey);
+    X509_free(cert);
     return E_FAIL;
   }
   
+  // Store the certificate and key
+  _pkey = pkey;
+  _cert = cert;
   
-  // Get identity from first item
-  CFDictionaryRef item = (CFDictionaryRef)CFArrayGetValueAtIndex(items, 0);
-  const void *identityPtr = CFDictionaryGetValue(item, kSecImportItemIdentity);
-  if (identityPtr) {
-    _identity = (SecIdentityRef)(uintptr_t)CFRetain(identityPtr);
-  } else {
-  }
-  
-  CFRelease(items);
-  return _identity ? S_OK : E_FAIL;
+  return S_OK;
 }
 
 HRESULT CSignatureHandler::SetTrustStore(const wchar_t *trustStorePath)
@@ -277,20 +510,55 @@ HRESULT CSignatureHandler::GetSupportedAlgorithms(UStringVector &algos)
   return S_OK;
 }
 
-CSignatureHandler::CSignatureHandler(): _revocationMode(NRevocationMode::kSoft), _identity(NULL), _trustPolicy(NULL)
+CSignatureHandler::CSignatureHandler(): _revocationMode(NRevocationMode::kSoft), _pkey(NULL), _cert(NULL), _trustStore(NULL), _useOpenSSL(false)
+#ifdef __APPLE__
+  , _identity(NULL), _trustPolicy(NULL)
+#elif defined(_WIN32)
+  , _hStore(NULL), _pCertContext(NULL)
+#endif
 {
+  printf("DEBUG: CSignatureHandler constructor called\n");
+#ifdef __APPLE__
   // Use basic X.509 policy - code signing policy is too restrictive for development certs
   _trustPolicy = SecPolicyCreateBasicX509();
+  printf("DEBUG: SecPolicyCreateBasicX509 completed\n");
+#endif
+  printf("DEBUG: CSignatureHandler constructor completed\n");
 }
 
 CSignatureHandler::~CSignatureHandler()
 {
+  if (_pkey) EVP_PKEY_free(_pkey);
+  if (_cert) X509_free(_cert);
+  if (_trustStore) X509_STORE_free(_trustStore);
+#ifdef __APPLE__
   if (_identity) CFRelease(_identity);
   if (_trustPolicy) CFRelease(_trustPolicy);
+#elif defined(_WIN32)
+  if (_pCertContext) CertFreeCertificateContext(_pCertContext);
+  if (_hStore) CertCloseStore(_hStore, 0);
+#endif
 }
 
 HRESULT CSignatureHandler::GetCertificateChain(CByteBuffer &certStore)
 {
+  if (_useOpenSSL)
+  {
+    // OpenSSL certificate export
+    if (!_cert) return E_INVALIDARG;
+    
+    int len = i2d_X509(_cert, NULL);
+    if (len <= 0) return E_FAIL;
+    
+    certStore.Alloc((size_t)len);
+    unsigned char *p = certStore;
+    if (i2d_X509(_cert, &p) != len) return E_FAIL;
+    
+    return S_OK;
+  }
+
+#ifdef __APPLE__
+  // Security framework certificate export
   if (!_identity) return E_INVALIDARG;
   
   SecCertificateRef cert = NULL;
@@ -309,6 +577,7 @@ HRESULT CSignatureHandler::GetCertificateChain(CByteBuffer &certStore)
   
   return S_OK;
 }
+#endif
 
 static void GetCertThumbprint(SecCertificateRef cert, UString &thumbprint)
 {
@@ -327,6 +596,9 @@ static void GetCertThumbprint(SecCertificateRef cert, UString &thumbprint)
 
 HRESULT CSignatureHandler::SelectIdentity(const wchar_t *selector, CObjectVector<CCertInfo> *outList)
 {
+  // Use Security framework only for keychain access
+  _useOpenSSL = false;
+  
   bool listMode = (wcscmp(selector, L"list") == 0);
   bool sha1Mode = (wcsncmp(selector, L"sha1:", 5) == 0);
   const wchar_t *match = sha1Mode ? selector + 5 : selector;

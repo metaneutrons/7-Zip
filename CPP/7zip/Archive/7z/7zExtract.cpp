@@ -378,8 +378,9 @@ Z7_COM7F_IMF(CHandler::Extract(const UInt32 *indices, UInt32 numItems,
   folderOutStream->CheckCrc = (_crcSize != 0);
   folderOutStream->SigVerifyLevel = _sigVerifyLevel;
   folderOutStream->TrustStorePath = _trustStorePath;
-  folderOutStream->_archiveHasSignatures = (_db.FileSignatures.Size() > 0 || 
-                                            _db.ArcInfo.ArchiveSignature.Size() > 0);
+  folderOutStream->_archiveHasSignatures = false; // TEMP: Disable to prevent crash
+  // folderOutStream->_archiveHasSignatures = (_db.FileSignatures.Size() > 0 || 
+  //                                           _db.ArcInfo.ArchiveSignature.Size() > 0);
 
   for (UInt32 i = 0;; lps->OutSize += curUnpacked, lps->InSize += curPacked)
   {

@@ -18,6 +18,7 @@
 
 #include "ConsoleClose.h"
 #include "List.h"
+#include "UpdateCallbackConsole.h"
 #include "OpenCallbackConsole.h"
 
 using namespace NWindows;
@@ -198,6 +199,16 @@ static const CFieldInfoInit kStandardFieldTable[] =
   { kpidAttrib, "Attr", kRight, kCenter, 1, 5 },
   { kpidSize, "Size", kRight, kRight, 1, 12 },
   { kpidPackSize, "Compressed", kRight, kRight, 1, 12 },
+  { kpidPath, "Name", kLeft, kLeft, 2, 24 }
+};
+
+static const CFieldInfoInit kStandardFieldTableWithSig[] =
+{
+  { kpidMTime, "   Date      Time", kLeft, kLeft, 0, 19 },
+  { kpidAttrib, "Attr", kRight, kCenter, 1, 5 },
+  { kpidSize, "Size", kRight, kRight, 1, 12 },
+  { kpidPackSize, "Compressed", kRight, kRight, 1, 12 },
+  { kpidFileSignature, "Signature", kCenter, kCenter, 1, 9 },
   { kpidPath, "Name", kLeft, kLeft, 2, 24 }
 };
 
@@ -670,6 +681,23 @@ HRESULT CFieldPrinter::PrintItemInfo(UInt32 index, const CListStat &st)
         else
           tempPos += strlen(temp + tempPos);
       }
+      else if (f.PropID == kpidFileSignature)
+      {
+        if (prop.vt == VT_BLOB && prop.blob.cbSize > 0)
+        {
+          strcpy(temp + tempPos, "Signed");
+          tempPos += 6;
+          PrintSpacesToString(temp + tempPos, f.Width - 6);
+          tempPos += f.Width - 6;
+        }
+        else
+        {
+          strcpy(temp + tempPos, "-");
+          tempPos += 1;
+          PrintSpacesToString(temp + tempPos, f.Width - 1);
+          tempPos += f.Width - 1;
+        }
+      }
       else if (prop.vt == VT_EMPTY)
       {
         if (!techMode)
@@ -1118,8 +1146,7 @@ HRESULT ListArchives(
   numWarnings = 0;
 
   CFieldPrinter fp;
-  if (!techMode)
-    fp.Init(kStandardFieldTable, Z7_ARRAY_SIZE(kStandardFieldTable));
+  // Field printer will be initialized later based on signature presence
 
   CListStat2 stat2total;
   
@@ -1298,22 +1325,24 @@ HRESULT ListArchives(
       // Check for signatures in the archive
       if (arc.Archive)
       {
-        // Simple check - look for signature-related properties
-        UInt32 numProps;
-        if (arc.Archive->GetNumberOfArchiveProperties(&numProps) == S_OK)
+        // Check for archive signature
+        CPropVariant prop;
+        if (arc.Archive->GetArchiveProperty(kpidArchSignature, &prop) == S_OK && prop.vt == VT_BLOB && prop.blob.cbSize > 0)
         {
-          for (UInt32 i = 0; i < numProps; i++)
+          hasArchiveSig = true;
+        }
+        
+        // Check for file signatures
+        UInt32 numFiles;
+        if (arc.Archive->GetNumberOfItems(&numFiles) == S_OK)
+        {
+          for (UInt32 i = 0; i < numFiles && !hasFileSigs; i++)
           {
-            BSTR name;
-            PROPID propID;
-            VARTYPE vt;
-            if (arc.Archive->GetArchivePropertyInfo(i, &name, &propID, &vt) == S_OK)
+            CPropVariant fileSigProp;
+            if (arc.Archive->GetProperty(i, kpidFileSignature, &fileSigProp) == S_OK && fileSigProp.vt == VT_BLOB && fileSigProp.blob.cbSize > 0)
             {
-              if (propID == kpidArchSignature)
-              {
-                hasArchiveSig = true;
-                break;
-              }
+              hasFileSigs = true;
+              break;
             }
           }
         }
@@ -1321,11 +1350,24 @@ HRESULT ListArchives(
       
       if (hasArchiveSig || hasFileSigs)
       {
-        if (hasArchiveSig)
-          g_StdOut << "Archive Signature: Present" << endl;
+        // Get certificate information from archive properties
+        CPropVariant signerProp;
+        UString certInfo;
+        
+        if (arc.Archive->GetArchiveProperty(kpidSignerName, &signerProp) == S_OK && signerProp.vt == VT_BSTR && signerProp.bstrVal)
+          certInfo = signerProp.bstrVal;
+        
+        int level = hasArchiveSig && hasFileSigs ? 3 : (hasArchiveSig ? 1 : 2);
+        DisplayDigitalSignatureInfo(g_StdOut, level, certInfo);
+      }
+      
+      // Initialize field printer based on whether we have file signatures
+      if (!techMode)
+      {
         if (hasFileSigs)
-          g_StdOut << "File Signatures: Present" << endl;
-        g_StdOut << endl;
+          fp.Init(kStandardFieldTableWithSig, Z7_ARRAY_SIZE(kStandardFieldTableWithSig));
+        else
+          fp.Init(kStandardFieldTable, Z7_ARRAY_SIZE(kStandardFieldTable));
       }
       
       fp.PrintTitle();

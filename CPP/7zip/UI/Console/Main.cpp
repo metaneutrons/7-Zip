@@ -1599,7 +1599,7 @@ int Main2(
     // Set digital signature info for console output
     if (!uo.DigSigCert.IsEmpty())
     {
-      SetDigitalSignatureInfoForConsole(uo.DigSigCert, uo.DigSigAlgo, uo.DigSigLevel);
+      SetDigitalSignatureInfoForConsole(uo.DigSigCert, uo.DigSigAlgo, uo.DigSigPass, uo.DigSigLevel);
     }
     
     hresultMain = UpdateArchive(codecs,

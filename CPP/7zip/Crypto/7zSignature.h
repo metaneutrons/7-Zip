@@ -8,13 +8,15 @@
 #include "../../Common/MyVector.h"
 #include "../Archive/IArchive.h"
 
+#include <openssl/evp.h>
+#include <openssl/x509.h>
+#include <openssl/pkcs12.h>
+#include <openssl/cms.h>
+
 #ifdef __APPLE__
 #include <Security/Security.h>
 #elif defined(_WIN32)
 #include <wincrypt.h>
-#elif defined(__linux__)
-#include <openssl/evp.h>
-#include <openssl/x509.h>
 #endif
 
 namespace NCrypto {
@@ -112,15 +114,18 @@ private:
   UString _password;
   NRevocationMode::EEnum _revocationMode;
 
+  // OpenSSL objects (used for file-based certificates)
+  EVP_PKEY *_pkey;
+  X509 *_cert;
+  X509_STORE *_trustStore;
+  bool _useOpenSSL;
+
 #ifdef __APPLE__
   SecIdentityRef _identity;
   SecPolicyRef _trustPolicy;
 #elif defined(_WIN32)
   HCERTSTORE _hStore;
   PCCERT_CONTEXT _pCertContext;
-#elif defined(__linux__)
-  EVP_PKEY *_pkey;
-  X509 *_cert;
 #endif
 };
 
