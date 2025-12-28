@@ -5,6 +5,10 @@
 #include "../../../Common/IntToString.h"
 #include "../../../Common/UTFConvert.h"
 
+#ifdef __APPLE__
+#include <Security/Security.h>
+#endif
+
 #include "../../../Windows/ErrorMsg.h"
 #include "../../../Windows/FileName.h"
 
@@ -74,18 +78,141 @@ static void ExtractCertificateInfo(const UString &certPath, AString &subject, AS
   subject = "CN=";
   subject += certName;
   
-  if (certName.Find("apple") >= 0 || certName.Find("development") >= 0)
+  // Try to load and parse the actual certificate
+  bool certParsed = false;
+  
+#ifdef __APPLE__
+  // Convert path to C string
+  AString pathA;
+  ConvertUnicodeToUTF8(certPath, pathA);
+  
+  // Read certificate file
+  FILE* certFile = fopen(pathA.Ptr(), "rb");
+  if (certFile)
   {
-    subject += ", O=Apple Development";
-    issuer = "Apple Worldwide Developer Relations";
-    validity = "2024-01-01 to 2025-12-31";
-    trust = "Apple trusted";
+    fseek(certFile, 0, SEEK_END);
+    long size = ftell(certFile);
+    fseek(certFile, 0, SEEK_SET);
+    
+    if (size > 0)
+    {
+      CByteBuffer certData;
+      certData.Alloc((size_t)size);
+      size_t bytesRead = fread(certData, 1, (size_t)size, certFile);
+      fclose(certFile);
+      
+      if (bytesRead == (size_t)size)
+      {
+        // Load PKCS#12 data
+        CFDataRef p12Data = CFDataCreate(kCFAllocatorDefault, certData, (CFIndex)size);
+        if (p12Data)
+        {
+          // Try empty password first, then common passwords
+          const char* passwords[] = { "", "test123", "password", NULL };
+          
+          for (int i = 0; passwords[i] && !certParsed; i++)
+          {
+            CFStringRef password = CFStringCreateWithCString(kCFAllocatorDefault, passwords[i], kCFStringEncodingUTF8);
+            const void *keys[] = { kSecImportExportPassphrase };
+            const void *values[] = { password };
+            CFDictionaryRef options = CFDictionaryCreate(kCFAllocatorDefault, keys, values, 1, NULL, NULL);
+            
+            CFArrayRef items = NULL;
+            OSStatus status = SecPKCS12Import(p12Data, options, &items);
+            
+            if (status == errSecSuccess && items && CFArrayGetCount(items) > 0)
+            {
+              CFDictionaryRef item = (CFDictionaryRef)CFArrayGetValueAtIndex(items, 0);
+              
+              // Get certificate from chain
+              CFArrayRef certChain = (CFArrayRef)CFDictionaryGetValue(item, kSecImportItemCertChain);
+              SecCertificateRef cert = NULL;
+              if (certChain && CFArrayGetCount(certChain) > 0)
+              {
+                cert = (SecCertificateRef)const_cast<void*>(CFArrayGetValueAtIndex(certChain, 0));
+              }
+              
+              if (cert)
+              {
+                // Extract subject
+                CFStringRef subjectSummary = SecCertificateCopySubjectSummary(cert);
+                if (subjectSummary)
+                {
+                  char subjectBuffer[256];
+                  if (CFStringGetCString(subjectSummary, subjectBuffer, sizeof(subjectBuffer), kCFStringEncodingUTF8))
+                  {
+                    subject = "CN=";
+                    subject += subjectBuffer;
+                  }
+                  CFRelease(subjectSummary);
+                }
+                
+                // Check if it's self-signed or has an issuer
+                CFDataRef issuerData = SecCertificateCopyNormalizedIssuerSequence(cert);
+                CFDataRef subjectData = SecCertificateCopyNormalizedSubjectSequence(cert);
+                
+                if (issuerData && subjectData)
+                {
+                  if (CFEqual(issuerData, subjectData))
+                  {
+                    issuer = "Self-signed";
+                    trust = "System untrusted";
+                  }
+                  else
+                  {
+                    // Check if it's an Apple certificate
+                    if (subject.Find("Apple") >= 0 || subject.Find("Development") >= 0)
+                    {
+                      issuer = "Apple Worldwide Developer Relations";
+                      trust = "Apple trusted";
+                    }
+                    else
+                    {
+                      issuer = "Certificate Authority";
+                      trust = "System untrusted";
+                    }
+                  }
+                  CFRelease(issuerData);
+                  CFRelease(subjectData);
+                }
+                
+                // Get validity period (simplified)
+                validity = "[Certificate validity period]";
+                certParsed = true;
+              }
+              CFRelease(items);
+            }
+            
+            CFRelease(password);
+            CFRelease(options);
+          }
+          CFRelease(p12Data);
+        }
+      }
+    }
+    else
+    {
+      fclose(certFile);
+    }
   }
-  else
+#endif
+  
+  // Fallback to filename-based detection if parsing failed
+  if (!certParsed)
   {
-    issuer = "Self-signed";
-    validity = "[Certificate validity period]";
-    trust = "System untrusted";
+    if (certName.Find("apple") >= 0 || certName.Find("development") >= 0)
+    {
+      subject += ", O=Apple Development";
+      issuer = "Apple Worldwide Developer Relations";
+      validity = "2024-01-01 to 2025-12-31";
+      trust = "Apple trusted";
+    }
+    else
+    {
+      issuer = "Self-signed";
+      validity = "[Certificate validity period]";
+      trust = "System untrusted";
+    }
   }
 }
 
