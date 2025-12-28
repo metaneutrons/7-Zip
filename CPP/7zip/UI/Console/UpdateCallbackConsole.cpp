@@ -3,6 +3,7 @@
 #include "StdAfx.h"
 
 #include "../../../Common/IntToString.h"
+#include "../../../Common/UTFConvert.h"
 
 #include "../../../Windows/ErrorMsg.h"
 #include "../../../Windows/FileName.h"
@@ -32,6 +33,15 @@ static const char * const kOpenArchiveMessage = "Open archive: ";
 static const char * const kCreatingArchiveMessage = "Creating archive: ";
 static const char * const kUpdatingArchiveMessage = "Updating archive: ";
 static const char * const kScanningMessage = "Scanning the drive:";
+
+// Digital signature info for console output
+static UString g_digSigCert;
+static UString g_digSigAlgo;
+static int g_digSigLevel = 0;
+
+// External signature verification variables
+extern int g_sigVerifyLevel;
+extern bool g_archiveHasSignatures;
 
 static const char * const kError = "ERROR: ";
 static const char * const kWarning = "WARNING: ";
@@ -315,7 +325,47 @@ HRESULT CUpdateCallbackConsole::StartArchive(const wchar_t *name, bool updating)
       _so->NormalizePrint_wstr_Path(name);
     else
       *_so << k_StdOut_ArcName;
-   *_so << endl << endl;
+   *_so << endl;
+   
+   // Print digital signature info if enabled
+   if (!g_digSigCert.IsEmpty())
+   {
+     *_so << endl;
+     *_so << "Digital Signature: Enabled (";
+     if (g_digSigLevel == 1)
+       *_so << "Archive-level";
+     else if (g_digSigLevel == 2) 
+       *_so << "File-level";
+     else
+       *_so << "Archive + File-level";
+     *_so << ")" << endl;
+     
+     // Extract certificate common name for display
+     AString certName("Unknown");
+     // Simple extraction - look for CN= in certificate path or use filename
+     if (g_digSigCert.Find(L".p12") >= 0 || g_digSigCert.Find(L".pfx") >= 0)
+     {
+       int lastSlash = g_digSigCert.ReverseFind_PathSepar();
+       if (lastSlash >= 0)
+       {
+         UString fileName = g_digSigCert.Ptr(lastSlash + 1);
+         int dotPos = fileName.ReverseFind(L'.');
+         if (dotPos >= 0)
+           fileName.DeleteFrom(dotPos);
+         ConvertUnicodeToUTF8(fileName, certName);
+       }
+     }
+     *_so << "Certificate: " << certName << endl;
+     
+     if (!g_digSigAlgo.IsEmpty())
+     {
+       AString algoName;
+       ConvertUnicodeToUTF8(g_digSigAlgo, algoName);
+       *_so << "Signature Algorithm: " << algoName << endl;
+     }
+   }
+   
+   *_so << endl;
   }
   return S_OK;
 }
@@ -997,3 +1047,18 @@ HRESULT CUpdateCallbackConsole::ReportFinished(UInt32 indexType, UInt32 index, I
   return S_OK;
 }
 */
+
+// Function to set digital signature info for console output
+void SetDigitalSignatureInfoForConsole(const UString &cert, const UString &algo, int level)
+{
+  g_digSigCert = cert;
+  g_digSigAlgo = algo;
+  g_digSigLevel = level;
+}
+
+// Function to set signature verification info for console output  
+void SetSignatureVerificationInfoForConsole(int level, bool hasSignatures)
+{
+  g_sigVerifyLevel = level;
+  g_archiveHasSignatures = hasSignatures;
+}

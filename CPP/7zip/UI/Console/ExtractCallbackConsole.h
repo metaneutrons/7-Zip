@@ -209,3 +209,9 @@ public:
 };
 
 #endif
+// Function to set signature verification info for console output
+void SetSignatureVerificationInfoForConsole(int level, bool hasSignatures);
+
+// Global signature verification variables
+extern int g_sigVerifyLevel;
+extern bool g_archiveHasSignatures;

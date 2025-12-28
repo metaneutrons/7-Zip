@@ -206,6 +206,10 @@ static const char * const kExtracting = "Extracting archive: ";
 static const char * const kTesting = "Testing archive: ";
 
 static const char * const kEverythingIsOk = "Everything is Ok";
+
+// Global signature verification level for console output
+int g_sigVerifyLevel = -1;
+bool g_archiveHasSignatures = false;
 static const char * const kNoFiles = "No files to process";
 
 static const char * const kUnsupportedMethod = "Unsupported Method";
@@ -845,6 +849,30 @@ HRESULT CExtractCallbackConsole::OpenResult(
     if (_so)
     {
       RINOK(Print_OpenArchive_Props(*_so, codecs, arcLink))
+      
+      // Print digital signature verification info if verification is enabled
+      if (g_sigVerifyLevel >= 0)
+      {
+        *_so << endl;
+        *_so << "Digital Signature Verification: ";
+        switch (g_sigVerifyLevel)
+        {
+          case 0: *_so << "Strict (Level 0)"; break;
+          case 1: *_so << "Mixed (Level 1)"; break;
+          case 2: *_so << "Permissive (Level 2)"; break;
+          case 3: *_so << "Warning-only (Level 3)"; break;
+          default: *_so << "Level " << g_sigVerifyLevel; break;
+        }
+        *_so << endl;
+        
+        // Show signature status if archive has signatures
+        if (g_archiveHasSignatures)
+        {
+          *_so << "Archive Signature: Present" << endl;
+          // Note: Detailed verification results would be shown during extraction
+        }
+      }
+      
       *_so << endl;
     }
   }

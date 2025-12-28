@@ -1290,6 +1290,44 @@ HRESULT ListArchives(
 
     if (enableHeaders && !techMode)
     {
+      // Check if archive has signatures and print signature info
+      const CArc &arc = arcLink.Arcs.Back();
+      bool hasArchiveSig = false;
+      bool hasFileSigs = false;
+      
+      // Check for signatures in the archive
+      if (arc.Archive)
+      {
+        // Simple check - look for signature-related properties
+        UInt32 numProps;
+        if (arc.Archive->GetNumberOfArchiveProperties(&numProps) == S_OK)
+        {
+          for (UInt32 i = 0; i < numProps; i++)
+          {
+            BSTR name;
+            PROPID propID;
+            VARTYPE vt;
+            if (arc.Archive->GetArchivePropertyInfo(i, &name, &propID, &vt) == S_OK)
+            {
+              if (propID == kpidArchSignature)
+              {
+                hasArchiveSig = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+      
+      if (hasArchiveSig || hasFileSigs)
+      {
+        if (hasArchiveSig)
+          g_StdOut << "Archive Signature: Present" << endl;
+        if (hasFileSigs)
+          g_StdOut << "File Signatures: Present" << endl;
+        g_StdOut << endl;
+      }
+      
       fp.PrintTitle();
       g_StdOut << endl;
       fp.PrintTitleLines();
