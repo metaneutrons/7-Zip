@@ -1390,6 +1390,12 @@ int Main2(
         // hb.Init();
       }
       
+      // Set signature verification info for console output
+      if (eo.DigSigVerify >= 0)
+      {
+        SetSignatureVerificationInfoForConsole(eo.DigSigVerify, true); // Assume signatures present for now
+      }
+      
       hresultMain = Extract(
           // EXTERNAL_CODECS_VARS_L
           codecs,
@@ -1589,6 +1595,13 @@ int Main2(
     if (!uo.Init(codecs, types, options.ArchiveName))
       throw kUnsupportedUpdateArcType;
     */
+    
+    // Set digital signature info for console output
+    if (!uo.DigSigCert.IsEmpty())
+    {
+      SetDigitalSignatureInfoForConsole(uo.DigSigCert, uo.DigSigAlgo, uo.DigSigLevel);
+    }
+    
     hresultMain = UpdateArchive(codecs,
         types,
         options.ArchiveName,

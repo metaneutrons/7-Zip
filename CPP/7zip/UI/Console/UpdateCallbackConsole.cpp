@@ -354,6 +354,15 @@ HRESULT CUpdateCallbackConsole::StartArchive(const wchar_t *name, bool updating)
            fileName.DeleteFrom(dotPos);
          ConvertUnicodeToUTF8(fileName, certName);
        }
+       else
+       {
+         // No path separator, use whole filename
+         UString fileName = g_digSigCert;
+         int dotPos = fileName.ReverseFind(L'.');
+         if (dotPos >= 0)
+           fileName.DeleteFrom(dotPos);
+         ConvertUnicodeToUTF8(fileName, certName);
+       }
      }
      *_so << "Certificate: " << certName << endl;
      
