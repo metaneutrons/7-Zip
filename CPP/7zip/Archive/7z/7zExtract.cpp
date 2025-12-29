@@ -182,7 +182,7 @@ HRESULT CFolderOutStream::CloseFile()
       HRESULT hr = sigHandler.Verify(digest, SHA256_DIGEST_SIZE, sig, sig.Size(), 
                                       verifyResult, certInfo);
       
-      if (hr != S_OK || verifyResult != 1)
+      if (hr != S_OK || verifyResult != NArchive::NExtract::NOperationResult::kOK)
       {
         // Signature verification failed
         if (SigVerifyLevel >= NCrypto::NSigVerifyLevel::kPermissive)
