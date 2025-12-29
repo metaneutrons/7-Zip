@@ -26,7 +26,7 @@ namespace NRevocationMode {
 }
 
 namespace NSigVerifyLevel {
-  enum EEnum { kStrict = 0, kMixed = 1, kPermissive = 2, kWarn = 3 };
+  enum EEnum { kDisabled = -1, kStrict = 0, kMixed = 1, kPermissive = 2, kWarn = 3 };
 }
 
 namespace NDigSigLevel {

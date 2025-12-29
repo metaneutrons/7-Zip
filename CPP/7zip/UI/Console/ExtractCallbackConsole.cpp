@@ -209,7 +209,7 @@ static const char * const kTesting = "Testing archive: ";
 static const char * const kEverythingIsOk = "Everything is Ok";
 
 // Global signature verification level for console output
-NCrypto::NSigVerifyLevel::EEnum g_sigVerifyLevel = (NCrypto::NSigVerifyLevel::EEnum)-1;
+NCrypto::NSigVerifyLevel::EEnum g_sigVerifyLevel = NCrypto::NSigVerifyLevel::kDisabled;
 bool g_archiveHasSignatures = false;
 static const char * const kNoFiles = "No files to process";
 
@@ -852,12 +852,13 @@ HRESULT CExtractCallbackConsole::OpenResult(
       RINOK(Print_OpenArchive_Props(*_so, codecs, arcLink))
       
       // Print digital signature verification info if verification is enabled
-      if ((int)g_sigVerifyLevel >= 0)
+      if (g_sigVerifyLevel != NCrypto::NSigVerifyLevel::kDisabled)
       {
         *_so << endl;
         *_so << "Digital Signature Verification: ";
         switch (g_sigVerifyLevel)
         {
+          case NCrypto::NSigVerifyLevel::kDisabled: break; // Already handled above
           case NCrypto::NSigVerifyLevel::kStrict: *_so << "Strict (Level 0)"; break;
           case NCrypto::NSigVerifyLevel::kMixed: *_so << "Mixed (Level 1)"; break;
           case NCrypto::NSigVerifyLevel::kPermissive: *_so << "Permissive (Level 2)"; break;

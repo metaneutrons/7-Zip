@@ -146,7 +146,7 @@ HRESULT CFolderOutStream::CloseFile()
   if (_calcCrc && fi.Crc != CRC_GET_DIGEST(_crc))
     return CloseFile_and_SetResult(NExtract::NOperationResult::kCRCError);
   
-  // Verify file signature if present (level: 0=strict, 1=mixed, 2=permissive, 3=warn)
+  // Verify file signature if present (see NSigVerifyLevel enum for level definitions)
   if (_calcSha256)
   {
     bool hasSig = (_fileIndex < _db->FileSignatures.Size() && 

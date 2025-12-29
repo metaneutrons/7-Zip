@@ -437,7 +437,6 @@ HRESULT Extract(
 
 
     // Check archive signature status based on verification level
-    // 0=strict, 1=mixed, 2=permissive, 3=warn
     if (arcLink.Arcs.Size() > 0)
     {
       IInArchive *archive = arcLink.Arcs.Back().Archive;
@@ -446,7 +445,7 @@ HRESULT Extract(
       {
         if (sigStatus.ulVal != NArchive::NExtract::NOperationResult::kOK)
         {
-          if (options.DigSigVerify >= 2)
+          if (options.DigSigVerify >= NCrypto::NSigVerifyLevel::kPermissive)
           {
             // Permissive/warn mode - continue but could log warning here
           }
