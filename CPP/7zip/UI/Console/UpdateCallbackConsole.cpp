@@ -1103,10 +1103,21 @@ void DisplayDigitalSignatureInfo(CStdOutStream &so, int level, const UString &ce
     }
     else
     {
-      subject = "Certificate parsing failed";
-      issuer = "Unable to extract certificate information";
-      validity = "Unknown";
-      trust = "Unknown";
+      // Try to extract basic info even if full parsing fails
+      if (certData && certSize > 0)
+      {
+        subject = "Certificate present (parsing failed)";
+        issuer = "Unable to parse certificate";
+        validity = "Unknown";
+        trust = "Certificate format not supported";
+      }
+      else
+      {
+        subject = "Certificate parsing failed";
+        issuer = "Unable to extract certificate information";
+        validity = "Unknown";
+        trust = "Unknown";
+      }
     }
   }
   else if (!certInfo.IsEmpty())

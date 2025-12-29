@@ -213,7 +213,8 @@ static const char * const kHelpString =
     "  -dsl{a|f|b} : signature Level: a=archive, f=files, b=both (default)\n"
     "  -dsv{0-3}   : Verification level: 0=strict, 1=mixed, 2=permissive, 3=warn\n"
     "  -dsrh       : Hard-fail revocation (fail if can't verify)\n"
-    "  -dsr0       : disable revocation checking (default: soft-fail)\n";
+    "  -dsr0       : disable revocation checking (default: soft-fail)\n"
+    "  -dsec{path} : Extract certificate chain to file (.pem format)\n";
 
 // ---------------------------
 // exception messages

@@ -220,11 +220,12 @@ enum Enum
   , kDigSigVerify
   , kDigSigRevHard
   , kDigSigRevOff
+  , kDigSigExtractCert
 };
 
 }
 
-static const char * const kDigSigLevelPostCharSet = "afb";
+static const char * const kDigSigLevelPostCharSet = "baf";
 static const char * const kDigSigVerifyPostCharSet = "0123smpw";
 
 
@@ -384,6 +385,7 @@ static const CSwitchForm kSwitchForms[] =
   , { "dsv", NSwitchType::kChar, false, 1, kDigSigVerifyPostCharSet }
   , { "dsrh", SWFRM_SIMPLE }
   , { "dsr0", SWFRM_SIMPLE }
+  , { "dsec", SWFRM_STRING_SINGL(1) }
 };
 
 static const char * const kUniversalWildcard = "*";
@@ -1568,6 +1570,15 @@ void CArcCmdLineParser::Parse2(CArcCmdLineOptions &options)
     options.ExtractOptions.DigSigRevocation = NCrypto::NRevocationMode::kHard;
   else if (parser[NKey::kDigSigRevOff].ThereIs)
     options.ExtractOptions.DigSigRevocation = NCrypto::NRevocationMode::kOff;
+  // Certificate extraction
+  if (parser[NKey::kDigSigExtractCert].ThereIs)
+  {
+    UString certPath = parser[NKey::kDigSigExtractCert].PostStrings[0];
+    // Remove leading '=' if present (command line parsing artifact)
+    if (!certPath.IsEmpty() && certPath[0] == L'=')
+      certPath.Delete(0);
+    options.ExtractOptions.DigSigExtractCertPath = certPath;
+  }
 
   options.ShowDialog = parser[NKey::kShowDialog].ThereIs;
 

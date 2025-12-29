@@ -22,6 +22,7 @@
 
 #include "ConsoleClose.h"
 #include "ExtractCallbackConsole.h"
+#include "UpdateCallbackConsole.h"
 #include "UserInputUtils.h"
 
 using namespace NWindows;
@@ -852,7 +853,7 @@ HRESULT CExtractCallbackConsole::OpenResult(
       RINOK(Print_OpenArchive_Props(*_so, codecs, arcLink))
       
       // Print digital signature verification info if verification is enabled
-      if (g_sigVerifyLevel != NCrypto::NSigVerifyLevel::kDisabled)
+      if (g_sigVerifyLevel != NCrypto::NSigVerifyLevel::kDisabled && g_archiveHasSignatures)
       {
         *_so << endl;
         *_so << "Digital Signature Verification: ";
@@ -867,12 +868,8 @@ HRESULT CExtractCallbackConsole::OpenResult(
         }
         *_so << endl;
         
-        // Show signature status if archive has signatures
-        if (g_archiveHasSignatures)
-        {
-          *_so << "Archive Signature: Present" << endl;
-          // Note: Detailed verification results would be shown during extraction
-        }
+        // Use standardized signature display
+        DisplayDigitalSignatureInfo(*_so, 3, UString(), NULL, 0);
       }
       
       *_so << endl;
