@@ -9,6 +9,7 @@
 
 #include "7zCompressionMode.h"
 #include "7zIn.h"
+#include "../../Crypto/7zSignature.h"
 
 namespace NArchive {
 namespace N7z {
@@ -116,7 +117,7 @@ struct CUpdateOptions
   UString DigSigKey;
   UString DigSigAlgo;
   UString DigSigPass;
-  int DigSigLevel; // 0=both, 1=archive-only, 2=file-only
+  NCrypto::NDigSigLevel::EEnum DigSigLevel;
 
   CUIntVector DisabledFilterIDs;
 

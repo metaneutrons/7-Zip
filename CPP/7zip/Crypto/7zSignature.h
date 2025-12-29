@@ -29,6 +29,10 @@ namespace NSigVerifyLevel {
   enum EEnum { kStrict = 0, kMixed = 1, kPermissive = 2, kWarn = 3 };
 }
 
+namespace NDigSigLevel {
+  enum EEnum { kBoth = 0, kArchiveOnly = 1, kFileOnly = 2 };
+}
+
 /**
  * Timestamp information extracted from CMS countersignature.
  * Used for long-term signature validity verification.

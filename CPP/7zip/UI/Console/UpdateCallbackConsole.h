@@ -147,7 +147,7 @@ public:
 
 #endif
 // Function to set digital signature info for console output
-void SetDigitalSignatureInfoForConsole(const UString &cert, const UString &algo, const UString &pass, int level);
+void SetDigitalSignatureInfoForConsole(const UString &cert, const UString &algo, const UString &pass, NCrypto::NDigSigLevel::EEnum level);
 // Function to set signature verification info for console output
 void SetSignatureVerificationInfoForConsole(int level, bool hasSignatures);
 // Function to display digital signature info

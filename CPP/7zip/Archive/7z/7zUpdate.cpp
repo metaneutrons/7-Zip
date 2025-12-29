@@ -2745,9 +2745,8 @@ HRESULT Update(
     }
     
     // Initialize per-file signature handler if certificate provided
-    // DigSigLevel: 0=both, 1=archive-only, 2=file-only
     NCrypto::CSignatureHandler *fileSigHandler = NULL;
-    if (!options.DigSigCert.IsEmpty() && options.DigSigLevel != 1)
+    if (!options.DigSigCert.IsEmpty() && options.DigSigLevel != NCrypto::NDigSigLevel::kArchiveOnly)
     {
       fileSigHandler = new NCrypto::CSignatureHandler();
       if (!options.DigSigPass.IsEmpty())
@@ -2815,8 +2814,7 @@ HRESULT Update(
       inStreamSpec->Need_MTime = options.Need_MTime;
       inStreamSpec->Need_Attrib = options.Need_Attrib;
       // inStreamSpec->Need_Crc = options.Need_Crc;
-      // DigSigLevel: 0=both, 1=archive-only, 2=file-only
-      inStreamSpec->Need_Sha256 = !options.DigSigCert.IsEmpty() && options.DigSigLevel != 1;
+      inStreamSpec->Need_Sha256 = !options.DigSigCert.IsEmpty() && options.DigSigLevel != NCrypto::NDigSigLevel::kArchiveOnly;
 
       inStreamSpec->Init(updateCallback, &indices[i], numSubFiles);
       
@@ -3125,8 +3123,7 @@ HRESULT Update(
     RINOK(opCallback->ReportOperation(NEventIndexType::kNoIndex, (UInt32)(Int32)-1, NUpdateNotifyOp::kHeader))
 
   // Sign archive if certificate provided and level allows it
-  // DigSigLevel: 0=both, 1=archive-only, 2=file-only
-  if (!options.DigSigCert.IsEmpty() && options.DigSigLevel != 2)
+  if (!options.DigSigCert.IsEmpty() && options.DigSigLevel != NCrypto::NDigSigLevel::kFileOnly)
   {
     // Hash header content for comprehensive coverage
     // NOTE: This hash computation MUST match the one in 7zHandler.cpp for verification

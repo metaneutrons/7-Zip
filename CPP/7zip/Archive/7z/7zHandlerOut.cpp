@@ -896,7 +896,7 @@ void COutHandler::InitProps7z()
   _enabledFilters.Clear();
   _disabledFilters.Clear();
   
-  _digSigLevel = 0;
+  _digSigLevel = NCrypto::NDigSigLevel::kBoth;
 }
 
 void COutHandler::InitProps()

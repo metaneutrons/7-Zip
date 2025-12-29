@@ -11,6 +11,7 @@
 #include "Property.h"
 #include "UpdateAction.h"
 #include "UpdateCallback.h"
+#include "../../Crypto/7zSignature.h"
 
 enum EArcNameMode
 {
@@ -109,7 +110,7 @@ struct CUpdateOptions
   UString DigSigKey;
   UString DigSigAlgo;
   UString DigSigPass;
-  int DigSigLevel; // 0=both(default), 'a'=archive-only, 'f'=file-only
+  NCrypto::NDigSigLevel::EEnum DigSigLevel;
 
   EArcNameMode ArcNameMode;
   NWildcard::ECensorPathMode PathMode;
@@ -149,7 +150,7 @@ struct CUpdateOptions
     SetArcMTime(false),
     RenameMode(false),
 
-    DigSigLevel(0),
+    DigSigLevel(NCrypto::NDigSigLevel::kBoth),
 
     ArcNameMode(k_ArcNameMode_Smart),
     PathMode(NWildcard::k_RelatPath)

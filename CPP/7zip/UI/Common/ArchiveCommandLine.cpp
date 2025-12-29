@@ -1536,7 +1536,7 @@ void CArcCmdLineParser::Parse2(CArcCmdLineOptions &options)
   }
   if (parser[NKey::kDigSigLevel].ThereIs)
   {
-    options.UpdateOptions.DigSigLevel = parser[NKey::kDigSigLevel].PostCharIndex;
+    options.UpdateOptions.DigSigLevel = (NCrypto::NDigSigLevel::EEnum)parser[NKey::kDigSigLevel].PostCharIndex;
     CProperty prop;
     prop.Name = L"dsl";
     prop.Value.Empty();

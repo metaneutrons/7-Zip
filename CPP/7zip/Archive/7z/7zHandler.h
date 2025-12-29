@@ -69,7 +69,7 @@ public:
   UString _digSigKey;
   UString _digSigAlgo;
   UString _digSigPass;
-  int _digSigLevel;
+  NCrypto::NDigSigLevel::EEnum _digSigLevel;
   
   void InitSolidFiles() { _numSolidFiles = (UInt64)(Int64)(-1); }
   void InitSolidSize()  { _numSolidBytes = (UInt64)(Int64)(-1); }

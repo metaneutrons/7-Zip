@@ -6,6 +6,7 @@
 #include "../../../Common/UTFConvert.h"
 
 #include "../../Crypto/CertUtils.h"
+#include "../../Crypto/7zSignature.h"
 
 #include "../../../Windows/ErrorMsg.h"
 #include "../../../Windows/FileName.h"
@@ -40,7 +41,7 @@ static const char * const kScanningMessage = "Scanning the drive:";
 static UString g_digSigCert;
 static UString g_digSigAlgo;
 static UString g_digSigPass;
-static int g_digSigLevel = 0;
+static NCrypto::NDigSigLevel::EEnum g_digSigLevel = NCrypto::NDigSigLevel::kBoth;
 
 // External signature verification variables
 extern int g_sigVerifyLevel;
@@ -336,9 +337,9 @@ HRESULT CUpdateCallbackConsole::StartArchive(const wchar_t *name, bool updating)
    {
      *_so << endl;
      *_so << "Digital Signature: Enabled (";
-     if (g_digSigLevel == 1)
+     if (g_digSigLevel == NCrypto::NDigSigLevel::kArchiveOnly)
        *_so << "Archive-level";
-     else if (g_digSigLevel == 2) 
+     else if (g_digSigLevel == NCrypto::NDigSigLevel::kFileOnly) 
        *_so << "File-level";
      else
        *_so << "Archive + File-level";
@@ -1045,7 +1046,7 @@ HRESULT CUpdateCallbackConsole::ReportFinished(UInt32 indexType, UInt32 index, I
 */
 
 // Function to set digital signature info for console output
-void SetDigitalSignatureInfoForConsole(const UString &cert, const UString &algo, const UString &pass, int level)
+void SetDigitalSignatureInfoForConsole(const UString &cert, const UString &algo, const UString &pass, NCrypto::NDigSigLevel::EEnum level)
 {
   g_digSigCert = cert;
   g_digSigAlgo = algo;
