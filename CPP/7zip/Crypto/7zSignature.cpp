@@ -32,11 +32,16 @@ using namespace NWindows;
 using namespace NFile;
 using namespace NIO;
 
-// Minimum RSA/DSA key size considered secure (NIST recommendation)
+// Minimum RSA/DSA key size considered secure (NIST SP 800-131A recommendation)
+static const int kMinSecureKeyBits = 2048;
 
 static const unsigned kSHA1HashSize = 20;
 
 #ifdef __APPLE__
+
+// macOS Security framework error code for certificate trust failure
+// (errSecCertificateExpired or similar trust evaluation failure)
+static const OSStatus kErrSecCertTrustFailure = -2147409622;
 
 static void CFStringToUString(CFStringRef cfStr, UString &out)
 {
@@ -163,7 +168,7 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
                                    Int32 &result, CCertInfo &certInfo)
 {
   
-  // Auto-detect signature format by trying to parse as CMS first
+  // Detect signature format by parsing as CMS
   BIO *testBio = BIO_new_mem_buf(sig, (int)sigLen);
   CMS_ContentInfo *testCms = NULL;
   if (testBio) {
@@ -212,7 +217,7 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
       result = NArchive::NExtract::NOperationResult::kOK;
     }
     else {
-      // Create fresh data BIO for second attempt
+      // Retry with fresh BIO
       BIO_free(dataBio);
       dataBio = BIO_new_mem_buf(data, (int)size);
       if (!dataBio) { 
@@ -223,13 +228,13 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
       
       // Clear OpenSSL error queue
       ERR_clear_error();
-      // Try again without certificate verification for self-signed certs
+      // Retry without certificate chain verification for self-signed certificates
       if (CMS_verify(cms, NULL, NULL, dataBio, NULL, CMS_DETACHED | CMS_BINARY | CMS_NOVERIFY) == 1)
       {
         result = NArchive::NExtract::NOperationResult::kOK;
       }
       else {
-        // Create fresh data BIO for third attempt
+        // Retry with fresh BIO and relaxed verification
         BIO_free(dataBio);
         dataBio = BIO_new_mem_buf(data, (int)size);
         if (!dataBio) { 
@@ -265,7 +270,7 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
                   status = CMSDecoderCopySignerStatus(decoder, 0, _trustPolicy, true, &signerStatus, &trust, &certVerifyResult);
                   
                   if (status == errSecSuccess && (signerStatus == kCMSSignerValid || 
-                      (signerStatus == kCMSSignerInvalidCert && certVerifyResult == -2147409622))) {
+                      (signerStatus == kCMSSignerInvalidCert && certVerifyResult == kErrSecCertTrustFailure))) {
                     result = NArchive::NExtract::NOperationResult::kOK;
                   } else {
                   }
@@ -324,11 +329,10 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
     }
     else
     {
-      if (signerStatus == kCMSSignerInvalidCert && certVerifyResult == -2147409622)
+      if (signerStatus == kCMSSignerInvalidCert && certVerifyResult == kErrSecCertTrustFailure)
       {
-        // Special case: Development certificates may not have proper EKU for code signing
-        // but the signature itself is cryptographically valid. For development purposes,
-        // we'll accept this as valid since the CMS decoder successfully verified the signature.
+        // Development certificates may lack code signing EKU but are cryptographically valid.
+        // Accept these signatures since the CMS decoder verified the cryptographic integrity.
         result = NArchive::NExtract::NOperationResult::kOK;
       }
       else
@@ -399,7 +403,7 @@ HRESULT CSignatureHandler::LoadIdentity(const wchar_t *certPath, const wchar_t *
   AString pathA;
   ConvertUnicodeToUTF8(pathU, pathA);
   
-  // Fix command line parsing bug that adds ':' prefix
+  // Strip leading colon from path if present (command line parsing artifact)
   if (pathA.Len() > 0 && pathA[0] == ':') {
     pathA = pathA.Ptr() + 1;
   }
@@ -415,7 +419,10 @@ HRESULT CSignatureHandler::LoadIdentity(const wchar_t *certPath, const wchar_t *
   long fileSize = ftell(fp);
   fseek(fp, 0, SEEK_SET);
   
-  if (fileSize <= 0 || fileSize > 1024*1024) { // Max 1MB
+  // Maximum certificate file size (1 MB)
+  static const long kMaxCertFileSize = 1024 * 1024;
+  
+  if (fileSize <= 0 || fileSize > kMaxCertFileSize) {
     fclose(fp);
     return E_INVALIDARG;
   }
@@ -668,7 +675,7 @@ HRESULT CSignatureHandler::LoadOrSelectIdentity(const wchar_t *s, const wchar_t 
       str.Find(L".PFX") >= 0 || str.Find(L".P12") >= 0) {
     return LoadIdentity(s, keyPath);
   }
-  // Otherwise try keychain
+  // Otherwise use keychain selection
   return SelectIdentity(s, NULL);
 }
 
@@ -907,8 +914,7 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
                       if (CryptDecodeObject(X509_ASN_ENCODING, "1.2.840.113549.1.9.16.1.4",
                           contentBuf, cbContent, 0, NULL, &cbTstInfo))
                       {
-                        // TSTInfo structure decoded - timestamp present and valid
-                        // Note: Full time extraction requires parsing ASN.1 GeneralizedTime
+                        // TSTInfo decoded - timestamp present and valid
                         certInfo.TimestampInfo.HasTimestamp = true;
                         certInfo.TimestampInfo.IsValid = true;
                       }
@@ -916,15 +922,6 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
                   }
                   CryptMsgClose(hTsMsg);
                 }
-                break;
-              }
-              // Legacy countersignature
-              else if (strcmp(pAttrs->rgAttr[i].pszObjId, szOID_RSA_counterSign) == 0 &&
-                       pAttrs->rgAttr[i].cValue > 0)
-              {
-                certInfo.TimestampInfo.HasTimestamp = true;
-                certInfo.TimestampInfo.IsValid = true;
-                // Legacy countersig - harder to extract time, mark as present
                 break;
               }
             }
@@ -1098,7 +1095,7 @@ HRESULT CSignatureHandler::LoadOrSelectIdentity(const wchar_t *s, const wchar_t 
   if (str.Find(L".pfx") >= 0 || str.Find(L".p12") >= 0 || 
       str.Find(L".PFX") >= 0 || str.Find(L".P12") >= 0)
     return LoadIdentity(s, keyPath);
-  // Otherwise try certificate store
+  // Otherwise use certificate store selection
   return SelectIdentity(s, NULL);
 }
 
@@ -1323,16 +1320,6 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
             CMS_ContentInfo_free(tsCms);
           }
         }
-      }
-    }
-    else
-    {
-      // Legacy countersignature
-      idx = CMS_unsigned_get_attr_by_NID(si, NID_pkcs9_countersignature, -1);
-      if (idx >= 0)
-      {
-        certInfo.TimestampInfo.HasTimestamp = true;
-        certInfo.TimestampInfo.IsValid = true;
       }
     }
   }

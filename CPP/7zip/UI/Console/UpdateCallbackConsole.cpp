@@ -347,30 +347,11 @@ HRESULT CUpdateCallbackConsole::StartArchive(const wchar_t *name, bool updating)
      // Enhanced certificate information display
      *_so << "Certificate:" << endl;
      
-     // Extract certificate details
-     AString subject, issuer, validity, trust;
-     
-     // Parse actual certificate information
-     NCrypto::CCertificateInfo parsedCert;
-     if (!g_digSigCert.IsEmpty() && NCrypto::ParseCertificateFromPKCS12(NULL, 0, NULL, parsedCert))
-     {
-       subject = parsedCert.Subject;
-       issuer = parsedCert.Issuer;
-       validity = parsedCert.ValidFrom + " to " + parsedCert.ValidTo;
-       trust = parsedCert.IsExpired ? "Expired" : "Valid";
-     }
-     else
-     {
-       subject = "Unknown";
-       issuer = "Unknown";
-       validity = "Unknown";
-       trust = "Unknown";
-     }
-     
-     *_so << "  Subject: " << subject << endl;
-     *_so << "  Issuer: " << issuer << endl;
-     *_so << "  Valid: " << validity << endl;
-     *_so << "  Trust: " << trust << endl;
+     // Certificate details are not available at this point (only path is known)
+     // Full certificate info is displayed during verification
+     AString certPath;
+     ConvertUnicodeToUTF8(g_digSigCert, certPath);
+     *_so << "  Path: " << certPath << endl;
      
      if (!g_digSigAlgo.IsEmpty())
      {

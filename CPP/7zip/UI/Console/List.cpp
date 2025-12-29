@@ -1047,10 +1047,10 @@ HRESULT Print_OpenArchive_Props(CStdOutStream &so, const CCodecs *codecs, const 
       }
     }
     
-    // Check for digital signature
+    // Display digital signature information
     {
       CPropVariant prop;
-      if (archive->GetArchiveProperty(kpidArchSignature, &prop) == S_OK && prop.vt == VT_BSTR && prop.bstrVal)
+      if (archive->GetArchiveProperty(kpidArchSignature, &prop) == S_OK && prop.vt == VT_BLOB && prop.blob.cbSize > 0)
       {
         so << "Signed: Yes" << endl;
         CPropVariant signerProp;

@@ -865,13 +865,9 @@ $O/ZipCrypto.o: ../../Crypto/ZipCrypto.cpp
 $O/ZipStrong.o: ../../Crypto/ZipStrong.cpp
 	$(CXX) $(CXXFLAGS) $<
 $O/7zSignature.o: ../../Crypto/7zSignature.cpp
-	$(CXX) $(CXXFLAGS) $<
+	$(CXX) $(CXXFLAGS) -Wno-reserved-macro-identifier -Wno-reserved-identifier -Wno-cast-function-type-strict -Wno-documentation-unknown-command $<
 $O/CertUtils.o: ../../Crypto/CertUtils.cpp
 	$(CXX) $(CXXFLAGS) -Wno-reserved-macro-identifier -Wno-reserved-identifier -Wno-cast-function-type-strict -Wno-documentation-unknown-command $<
-
-$O/7zSignature.o: ../../Crypto/7zSignature.cpp
-	$(CXX) $(CXXFLAGS) -Wno-reserved-macro-identifier -Wno-reserved-identifier -Wno-cast-function-type-strict -Wno-documentation-unknown-command $<
-
 
 
 $O/CoderMixer2.o: ../../Archive/Common/CoderMixer2.cpp

@@ -103,7 +103,7 @@ HRESULT CFolderOutStream::OpenFile(bool isCorrupted)
   _crc = CRC_INIT_VAL;
   _calcCrc = (CheckCrc && fi.CrcDefined && !fi.IsDir);
   
-  // Initialize SHA256 based on verification level and file signature presence
+  // Initialize SHA256 for file signature verification if signature present
   bool hasSig = (_fileIndex < _db->FileSignatures.Size() && 
                  _db->FileSignatures[_fileIndex].Size() > 0);
   _calcSha256 = hasSig;
@@ -146,7 +146,7 @@ HRESULT CFolderOutStream::CloseFile()
   if (_calcCrc && fi.Crc != CRC_GET_DIGEST(_crc))
     return CloseFile_and_SetResult(NExtract::NOperationResult::kCRCError);
   
-  // Signature verification based on level: 0=strict, 1=mixed, 2=permissive, 3=warn
+  // Verify file signature if present (level: 0=strict, 1=mixed, 2=permissive, 3=warn)
   if (_calcSha256)
   {
     bool hasSig = (_fileIndex < _db->FileSignatures.Size() && 
@@ -377,9 +377,8 @@ Z7_COM7F_IMF(CHandler::Extract(const UInt32 *indices, UInt32 numItems,
   folderOutStream->CheckCrc = (_crcSize != 0);
   folderOutStream->SigVerifyLevel = _sigVerifyLevel;
   folderOutStream->TrustStorePath = _trustStorePath;
-  folderOutStream->_archiveHasSignatures = false; // TEMP: Disable to prevent crash
-  // folderOutStream->_archiveHasSignatures = (_db.FileSignatures.Size() > 0 || 
-  //                                           _db.ArcInfo.ArchiveSignature.Size() > 0);
+  folderOutStream->_archiveHasSignatures = (_db.FileSignatures.Size() > 0 || 
+                                            _db.ArcInfo.ArchiveSignature.Size() > 0);
 
   for (UInt32 i = 0;; lps->OutSize += curUnpacked, lps->InSize += curPacked)
   {

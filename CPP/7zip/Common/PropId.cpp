@@ -115,11 +115,11 @@ const Byte k7z_PROPID_To_VARTYPE[kpid_NUM_DEFINED] =
   VT_UI4,
   VT_UI4, // kpidDevMinor
   // Digital signature properties
-  VT_BSTR, // kpidArchSignature
-  VT_BSTR, // kpidFileSignature
-  VT_BSTR, // kpidCertificateStore
+  VT_BSTR, // kpidArchSignature - binary CMS signature (stored as BLOB)
+  VT_BSTR, // kpidFileSignature - binary per-file signature (stored as BLOB)
+  VT_BSTR, // kpidCertificateStore - binary certificate chain (stored as BLOB)
   VT_BSTR, // kpidSignerName
-  VT_I4,   // kpidSignatureStatus - verification result code
+  VT_UI4,  // kpidSignatureStatus - verification result code (NOperationResult enum)
   VT_BSTR, // kpidSignerIssuer
   VT_BSTR, // kpidTimestampAuthority
   VT_BSTR  // kpidTimestampTime

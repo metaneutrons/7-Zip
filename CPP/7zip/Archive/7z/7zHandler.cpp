@@ -805,8 +805,7 @@ Z7_COM7F_IMF(CHandler::Open(IInStream *stream,
     if (_db.ArcInfo.ArchiveSignature.Size() > 0)
     {
       try {
-        // Re-enable signature verification for Apple Developer certificate testing
-        // Compute hash of header content (same as signing)
+        // Compute hash of header content for signature verification
         CSha256 sha;
         Sha256_Init(&sha);
         

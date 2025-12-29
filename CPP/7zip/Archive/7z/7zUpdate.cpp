@@ -2744,7 +2744,7 @@ HRESULT Update(
       */
     }
     
-    // Create signature handler for per-file signing if certificate provided
+    // Initialize per-file signature handler if certificate provided
     // DigSigLevel: 0=both, 1=archive-only, 2=file-only
     NCrypto::CSignatureHandler *fileSigHandler = NULL;
     if (!options.DigSigCert.IsEmpty() && options.DigSigLevel != 1)
@@ -3200,11 +3200,10 @@ HRESULT Update(
     }
     hr = sigHandler.Sign(digest, SHA256_DIGEST_SIZE, newDatabase.ArchiveSignature);
     if (FAILED(hr))
-      return hr;  // Fail if signing fails
+      return hr;
     sigHandler.GetCertificateChain(newDatabase.CertificateStore);
   }
-  // Note: if sourceWasSigned but no signing keys, warning was already reported
-  // and newDatabase signatures remain empty (signature removed)
+  // If source was signed but no signing keys provided, signatures are removed
 
   RINOK(archive.WriteDatabase(EXTERNAL_CODECS_LOC_VARS
       newDatabase, options.HeaderMethod, options.HeaderOptions))
