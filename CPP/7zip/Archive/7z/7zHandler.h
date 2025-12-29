@@ -7,9 +7,7 @@
 #include "../IArchive.h"
 
 #include "../../Common/CreateCoder.h"
-
-// Forward declaration for signature support
-namespace NCrypto { struct CCertInfo; }
+#include "../../Crypto/7zSignature.h"
 
 #ifndef Z7_7Z_SET_PROPERTIES
 
@@ -150,7 +148,7 @@ private:
   UString _timestampAuthority;
   UString _timestampTime;
   UString _trustStorePath;
-  int _sigVerifyLevel;  // 0=strict, 1=mixed, 2=permissive, 3=warn
+  NCrypto::NSigVerifyLevel::EEnum _sigVerifyLevel;
   
  #ifndef Z7_NO_CRYPTO
   bool _isEncrypted;

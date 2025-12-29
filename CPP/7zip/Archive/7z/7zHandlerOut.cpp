@@ -1097,7 +1097,7 @@ HRESULT COutHandler::SetProperty(const wchar_t *nameSpec, const PROPVARIANT &val
     if (name.IsEqualTo("dsl"))
     {
       if (value.vt != VT_UI4) return E_INVALIDARG;
-      _digSigLevel = (int)value.ulVal;
+      _digSigLevel = (NCrypto::NDigSigLevel::EEnum)value.ulVal;
       return S_OK;
     }
 

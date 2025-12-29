@@ -1561,13 +1561,13 @@ void CArcCmdLineParser::Parse2(CArcCmdLineOptions &options)
     // Map char index to level: 0-3 direct, s=0, m=1, p=2, w=3
     int idx = parser[NKey::kDigSigVerify].PostCharIndex;
     int level = (idx < 4) ? idx : (idx - 4);
-    options.ExtractOptions.DigSigVerify = level;
+    options.ExtractOptions.DigSigVerify = (NCrypto::NSigVerifyLevel::EEnum)level;
   }
-  // Revocation mode: 0=soft (default), 1=hard, 2=off
+  // Revocation mode
   if (parser[NKey::kDigSigRevHard].ThereIs)
-    options.ExtractOptions.DigSigRevocation = 1;
+    options.ExtractOptions.DigSigRevocation = NCrypto::NRevocationMode::kHard;
   else if (parser[NKey::kDigSigRevOff].ThereIs)
-    options.ExtractOptions.DigSigRevocation = 2;
+    options.ExtractOptions.DigSigRevocation = NCrypto::NRevocationMode::kOff;
 
   options.ShowDialog = parser[NKey::kShowDialog].ThereIs;
 

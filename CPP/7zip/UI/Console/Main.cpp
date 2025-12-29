@@ -1391,7 +1391,7 @@ int Main2(
       }
       
       // Set signature verification info for console output
-      if (eo.DigSigVerify >= 0)
+      if ((int)eo.DigSigVerify >= 0)
       {
         SetSignatureVerificationInfoForConsole(eo.DigSigVerify, true); // Assume signatures present for now
       }

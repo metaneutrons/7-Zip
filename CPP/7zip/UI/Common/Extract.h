@@ -6,6 +6,7 @@
 #include "../../../Windows/FileFind.h"
 
 #include "../../Archive/IArchive.h"
+#include "../../Crypto/7zSignature.h"
 
 #include "ArchiveExtractCallback.h"
 #include "ArchiveOpenCallback.h"
@@ -32,12 +33,11 @@ struct CExtractOptionsBase
   FString OutputDir;
   UString HashDir;
 
-  // Digital signature verification level:
-  // 0=strict (default), 1=mixed, 2=permissive, 3=warn
-  int DigSigVerify;
+  // Digital signature verification level
+  NCrypto::NSigVerifyLevel::EEnum DigSigVerify;
   UString DigSigTrustStore;
-  // Revocation mode: 0=soft (default), 1=hard, 2=off
-  int DigSigRevocation;
+  // Revocation mode
+  NCrypto::NRevocationMode::EEnum DigSigRevocation;
 
   CExtractOptionsBase():
       ExcludeDirItems(false),
@@ -47,8 +47,8 @@ struct CExtractOptionsBase
       PathMode(NExtract::NPathMode::kFullPaths),
       OverwriteMode(NExtract::NOverwriteMode::kAsk),
       ZoneMode(NExtract::NZoneIdMode::kNone),
-      DigSigVerify(0),
-      DigSigRevocation(0)
+      DigSigVerify(NCrypto::NSigVerifyLevel::kStrict),
+      DigSigRevocation(NCrypto::NRevocationMode::kSoft)
       {}
 };
 

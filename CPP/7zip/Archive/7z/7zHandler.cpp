@@ -993,9 +993,9 @@ Z7_COM7F_IMF(CHandler::SetProperties(const wchar_t * const *names, const PROPVAR
     if (name.IsEqualTo("dsv"))
     {
       if (value.vt == VT_UI4)
-        _sigVerifyLevel = (int)value.ulVal;
+        _sigVerifyLevel = (NCrypto::NSigVerifyLevel::EEnum)value.ulVal;
       else if (value.vt == VT_BSTR && value.bstrVal && value.bstrVal[0])
-        _sigVerifyLevel = value.bstrVal[0] - '0';
+        _sigVerifyLevel = (NCrypto::NSigVerifyLevel::EEnum)(value.bstrVal[0] - '0');
       continue;
     }
     

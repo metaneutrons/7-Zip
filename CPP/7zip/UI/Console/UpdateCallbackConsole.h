@@ -5,6 +5,8 @@
 
 #include "../../../Common/StdOutStream.h"
 
+#include "../../Crypto/7zSignature.h"
+
 #include "../Common/Update.h"
 
 #include "PercentPrinter.h"
@@ -145,10 +147,11 @@ public:
   // ~CUpdateCallbackConsole() { if (NeedPercents()) _percent.ClosePrint(); }
 };
 
-#endif
 // Function to set digital signature info for console output
 void SetDigitalSignatureInfoForConsole(const UString &cert, const UString &algo, const UString &pass, NCrypto::NDigSigLevel::EEnum level);
 // Function to set signature verification info for console output
-void SetSignatureVerificationInfoForConsole(int level, bool hasSignatures);
+void SetSignatureVerificationInfoForConsole(NCrypto::NSigVerifyLevel::EEnum level, bool hasSignatures);
 // Function to display digital signature info
 void DisplayDigitalSignatureInfo(CStdOutStream &so, int level, const UString &certInfo, const Byte *certData = NULL, size_t certSize = 0);
+
+#endif

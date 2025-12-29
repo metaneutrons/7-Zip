@@ -27,7 +27,7 @@ Z7_CLASS_IMP_COM_1(
 public:
   bool TestMode;
   bool CheckCrc;
-  int SigVerifyLevel;  // 0=strict, 1=mixed, 2=permissive, 3=warn
+  NCrypto::NSigVerifyLevel::EEnum SigVerifyLevel;
   UString TrustStorePath;
 private:
   bool _fileIsOpen;
@@ -57,7 +57,7 @@ public:
   CFolderOutStream():
       TestMode(false),
       CheckCrc(true),
-      SigVerifyLevel(0),
+      SigVerifyLevel(NCrypto::NSigVerifyLevel::kStrict),
       _archiveHasSignatures(false)
       {}
 
@@ -158,7 +158,7 @@ HRESULT CFolderOutStream::CloseFile()
       bool hasArchiveSig = (_db->ArcInfo.ArchiveSignature.Size() > 0);
       bool hasFileSigs = (_db->FileSignatures.Size() > 0);
       
-      if (SigVerifyLevel == 0 && hasFileSigs && !hasArchiveSig)
+      if (SigVerifyLevel == NCrypto::NSigVerifyLevel::kStrict && hasFileSigs && !hasArchiveSig)
       {
         // Strict mode: fail on unsigned file in archive with file-level signatures
         return CloseFile_and_SetResult(NExtract::NOperationResult::kDataError);
@@ -185,7 +185,7 @@ HRESULT CFolderOutStream::CloseFile()
       if (hr != S_OK || verifyResult != 1)
       {
         // Signature verification failed
-        if (SigVerifyLevel >= 2)
+        if (SigVerifyLevel >= NCrypto::NSigVerifyLevel::kPermissive)
         {
           // Permissive/warn: allow invalid signatures
         }

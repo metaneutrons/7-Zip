@@ -44,7 +44,7 @@ static UString g_digSigPass;
 static NCrypto::NDigSigLevel::EEnum g_digSigLevel = NCrypto::NDigSigLevel::kBoth;
 
 // External signature verification variables
-extern int g_sigVerifyLevel;
+extern NCrypto::NSigVerifyLevel::EEnum g_sigVerifyLevel;
 extern bool g_archiveHasSignatures;
 
 // Function to extract certificate information for display
@@ -1055,7 +1055,7 @@ void SetDigitalSignatureInfoForConsole(const UString &cert, const UString &algo,
 }
 
 // Function to set signature verification info for console output  
-void SetSignatureVerificationInfoForConsole(int level, bool hasSignatures)
+void SetSignatureVerificationInfoForConsole(NCrypto::NSigVerifyLevel::EEnum level, bool hasSignatures)
 {
   g_sigVerifyLevel = level;
   g_archiveHasSignatures = hasSignatures;

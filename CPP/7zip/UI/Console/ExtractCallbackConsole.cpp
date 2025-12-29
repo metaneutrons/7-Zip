@@ -16,6 +16,7 @@
 #endif
 
 #include "../../Common/FilePathAutoRename.h"
+#include "../../Crypto/7zSignature.h"
 
 #include "../Common/ExtractingFilePath.h"
 
@@ -208,7 +209,7 @@ static const char * const kTesting = "Testing archive: ";
 static const char * const kEverythingIsOk = "Everything is Ok";
 
 // Global signature verification level for console output
-int g_sigVerifyLevel = -1;
+NCrypto::NSigVerifyLevel::EEnum g_sigVerifyLevel = (NCrypto::NSigVerifyLevel::EEnum)-1;
 bool g_archiveHasSignatures = false;
 static const char * const kNoFiles = "No files to process";
 
@@ -851,17 +852,17 @@ HRESULT CExtractCallbackConsole::OpenResult(
       RINOK(Print_OpenArchive_Props(*_so, codecs, arcLink))
       
       // Print digital signature verification info if verification is enabled
-      if (g_sigVerifyLevel >= 0)
+      if ((int)g_sigVerifyLevel >= 0)
       {
         *_so << endl;
         *_so << "Digital Signature Verification: ";
         switch (g_sigVerifyLevel)
         {
-          case 0: *_so << "Strict (Level 0)"; break;
-          case 1: *_so << "Mixed (Level 1)"; break;
-          case 2: *_so << "Permissive (Level 2)"; break;
-          case 3: *_so << "Warning-only (Level 3)"; break;
-          default: *_so << "Level " << g_sigVerifyLevel; break;
+          case NCrypto::NSigVerifyLevel::kStrict: *_so << "Strict (Level 0)"; break;
+          case NCrypto::NSigVerifyLevel::kMixed: *_so << "Mixed (Level 1)"; break;
+          case NCrypto::NSigVerifyLevel::kPermissive: *_so << "Permissive (Level 2)"; break;
+          case NCrypto::NSigVerifyLevel::kWarn: *_so << "Warning-only (Level 3)"; break;
+          default: *_so << "Level " << (int)g_sigVerifyLevel; break;
         }
         *_so << endl;
         
