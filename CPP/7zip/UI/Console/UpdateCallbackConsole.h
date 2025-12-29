@@ -151,4 +151,4 @@ void SetDigitalSignatureInfoForConsole(const UString &cert, const UString &algo,
 // Function to set signature verification info for console output
 void SetSignatureVerificationInfoForConsole(int level, bool hasSignatures);
 // Function to display digital signature info
-void DisplayDigitalSignatureInfo(CStdOutStream &so, int level, const UString &certInfo);
+void DisplayDigitalSignatureInfo(CStdOutStream &so, int level, const UString &certInfo, const Byte *certData = NULL, size_t certSize = 0);

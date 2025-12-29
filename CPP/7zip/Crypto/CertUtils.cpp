@@ -7,24 +7,76 @@
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
+#include <openssl/cms.h>
 
 namespace NCrypto {
 
 bool ParseCertificateFromPKCS12(const Byte *data, size_t size, const char *password, CCertificateInfo &certInfo)
 {
-  (void)data; // Suppress unused warning
-  printf("DEBUG: ParseCertificateFromPKCS12 called with size=%zu, password=%s\n", size, password ? password : "NULL");
+  if (!data || size == 0) return false;
   
-  // For debugging, just return fake certificate info without using OpenSSL
-  certInfo.Subject = "/CN=Debug Certificate";
-  certInfo.Issuer = "/CN=Debug CA";
-  certInfo.ValidFrom = "Jan 1 2024";
-  certInfo.ValidTo = "Jan 1 2025";
-  certInfo.IsExpired = false;
-  certInfo.IsSelfSigned = true;
+  BIO *bio = BIO_new_mem_buf(data, (int)size);
+  if (!bio) return false;
   
-  printf("DEBUG: Returning fake certificate info\n");
-  return true;
+  PKCS12 *p12 = d2i_PKCS12_bio(bio, NULL);
+  BIO_free(bio);
+  if (!p12) return false;
+  
+  EVP_PKEY *pkey = NULL;
+  X509 *cert = NULL;
+  STACK_OF(X509) *ca = NULL;
+  
+  bool result = false;
+  if (PKCS12_parse(p12, password ? password : "", &pkey, &cert, &ca)) {
+    if (cert) {
+      result = ExtractCertificateInfo(cert, certInfo);
+      X509_free(cert);
+    }
+    if (pkey) EVP_PKEY_free(pkey);
+    if (ca) sk_X509_pop_free(ca, X509_free);
+  }
+  
+  PKCS12_free(p12);
+  return result;
+}
+
+bool ParseCertificateFromCMS(const Byte *data, size_t size, CCertificateInfo &certInfo)
+{
+  if (!data || size == 0) return false;
+  
+  BIO *bio = BIO_new_mem_buf(data, (int)size);
+  if (!bio) return false;
+  
+  CMS_ContentInfo *cms = d2i_CMS_bio(bio, NULL);
+  BIO_free(bio);
+  if (!cms) return false;
+  
+  STACK_OF(X509) *certs = CMS_get1_certs(cms);
+  bool result = false;
+  
+  if (certs && sk_X509_num(certs) > 0) {
+    X509 *cert = sk_X509_value(certs, 0); // Use first certificate
+    if (cert) {
+      result = ExtractCertificateInfo(cert, certInfo);
+    }
+  }
+  
+  if (certs) sk_X509_pop_free(certs, X509_free);
+  CMS_ContentInfo_free(cms);
+  return result;
+}
+
+bool ParseCertificateFromX509(const Byte *data, size_t size, CCertificateInfo &certInfo)
+{
+  if (!data || size == 0) return false;
+  
+  const unsigned char *p = data;
+  X509 *cert = d2i_X509(NULL, &p, (long)size);
+  if (!cert) return false;
+  
+  bool result = ExtractCertificateInfo(cert, certInfo);
+  X509_free(cert);
+  return result;
 }
 
 bool ExtractCertificateInfo(X509 *cert, CCertificateInfo &certInfo)

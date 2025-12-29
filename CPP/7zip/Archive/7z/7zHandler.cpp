@@ -881,10 +881,56 @@ Z7_COM7F_IMF(CHandler::Open(IInStream *stream,
         _hasTimestamp = certInfo.TimestampInfo.HasTimestamp;
         _timestampAuthority = certInfo.TimestampInfo.Authority;
         _timestampTime = certInfo.TimestampInfo.Timestamp;
+        
+        // Extract certificate store for detailed parsing
+        sigHandler.GetCertificateChain(_db.ArcInfo.CertificateStore);
       }
       catch (...) {
         // Signature verification failed, but don't fail the archive open
         _signatureVerifyResult = NExtract::NOperationResult::kSignatureFailed;
+      }
+    }
+    
+    // Extract certificate info from file signatures if no archive signature
+    if (_db.ArcInfo.ArchiveSignature.Size() == 0 && _db.FileSignatures.Size() > 0)
+    {
+      // Find first non-empty file signature and extract certificate
+      for (unsigned i = 0; i < _db.FileSignatures.Size(); i++)
+      {
+        if (_db.FileSignatures[i].Size() > 0)
+        {
+          try {
+            NCrypto::CSignatureHandler sigHandler;
+            if (!_trustStorePath.IsEmpty())
+              sigHandler.SetTrustStore(_trustStorePath);
+            NCrypto::CCertInfo certInfo;
+            
+            // Verify signature to extract certificate info (we don't need the data hash for this)
+            Byte dummyHash[32] = {0};
+            Int32 verifyResult;
+            sigHandler.Verify(dummyHash, 32,
+                              _db.FileSignatures[i],
+                              _db.FileSignatures[i].Size(),
+                              verifyResult, certInfo);
+            
+            // Store certificate info even if verification fails
+            _signerName = certInfo.Subject;
+            _signerIssuer = certInfo.Issuer;
+            _signerWeakKey = certInfo.IsWeakKey;
+            _signerWeakAlgo = certInfo.IsWeakAlgo;
+            _signerExpired = certInfo.IsExpired;
+            _hasTimestamp = certInfo.TimestampInfo.HasTimestamp;
+            _timestampAuthority = certInfo.TimestampInfo.Authority;
+            _timestampTime = certInfo.TimestampInfo.Timestamp;
+            
+            // Extract certificate store for detailed parsing
+            sigHandler.GetCertificateChain(_db.ArcInfo.CertificateStore);
+            break; // Use first signature found
+          }
+          catch (...) {
+            // Continue to next signature if this one fails
+          }
+        }
       }
     }
     

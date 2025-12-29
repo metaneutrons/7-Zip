@@ -19,6 +19,8 @@ struct CCertificateInfo {
 
 // Cross-platform certificate parsing using OpenSSL
 bool ParseCertificateFromPKCS12(const Byte *data, size_t size, const char *password, CCertificateInfo &certInfo);
+bool ParseCertificateFromCMS(const Byte *data, size_t size, CCertificateInfo &certInfo);
+bool ParseCertificateFromX509(const Byte *data, size_t size, CCertificateInfo &certInfo);
 bool ExtractCertificateInfo(X509 *cert, CCertificateInfo &certInfo);
 
 }

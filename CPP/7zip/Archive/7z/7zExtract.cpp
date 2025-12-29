@@ -104,10 +104,9 @@ HRESULT CFolderOutStream::OpenFile(bool isCorrupted)
   _calcCrc = (CheckCrc && fi.CrcDefined && !fi.IsDir);
   
   // Initialize SHA256 based on verification level and file signature presence
-  // bool hasSig = (_fileIndex < _db->FileSignatures.Size() && 
-  //                _db->FileSignatures[_fileIndex].Size() > 0);
-  // TEMPORARY: Disable file signature verification to debug the issue
-  _calcSha256 = false;
+  bool hasSig = (_fileIndex < _db->FileSignatures.Size() && 
+                 _db->FileSignatures[_fileIndex].Size() > 0);
+  _calcSha256 = hasSig;
   if (_calcSha256)
     Sha256_Init(&_sha256);
 

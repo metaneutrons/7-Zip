@@ -162,7 +162,6 @@ HRESULT CSignatureHandler::Sign(const Byte *data, size_t size, CByteBuffer &sign
 HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig, size_t sigLen,
                                    Int32 &result, CCertInfo &certInfo)
 {
-  printf("DEBUG: Verify called, _useOpenSSL=%d, sigLen=%zu\n", _useOpenSSL, sigLen);
   
   // Auto-detect signature format by trying to parse as CMS first
   BIO *testBio = BIO_new_mem_buf(sig, (int)sigLen);
@@ -173,34 +172,28 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
   }
   
   if (testCms) {
-    printf("DEBUG: Detected CMS signature, using OpenSSL verification\n");
     CMS_ContentInfo_free(testCms);
     // Force OpenSSL verification for CMS signatures
     _useOpenSSL = true;
   } else {
-    printf("DEBUG: Not CMS, using macOS Security framework verification\n");
     _useOpenSSL = false;
   }
   
   if (_useOpenSSL)
   {
-    printf("DEBUG: Using OpenSSL CMS verification path\n");
     // OpenSSL verification for file-based certificates using CMS
     result = NArchive::NExtract::NOperationResult::kSignatureFailed;
     
     BIO *bio = BIO_new_mem_buf(sig, (int)sigLen);
     if (!bio) {
-      printf("DEBUG: Failed to create BIO from signature\n");
       return E_FAIL;
     }
     
     CMS_ContentInfo *cms = d2i_CMS_bio(bio, NULL);
     BIO_free(bio);
     if (!cms) {
-      printf("DEBUG: Failed to parse CMS from signature\n");
       return E_FAIL;
     }
-    printf("DEBUG: CMS parsed successfully\n");
     
     BIO *dataBio = BIO_new_mem_buf(data, (int)size);
     if (!dataBio) { CMS_ContentInfo_free(cms); return E_FAIL; }
@@ -216,11 +209,9 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
     
     if (CMS_verify(cms, NULL, store, dataBio, NULL, CMS_DETACHED | CMS_BINARY) == 1)
     {
-      printf("DEBUG: CMS_verify succeeded\n");
       result = NArchive::NExtract::NOperationResult::kOK;
     }
     else {
-      printf("DEBUG: CMS_verify failed, trying with NOVERIFY\n");
       // Create fresh data BIO for second attempt
       BIO_free(dataBio);
       dataBio = BIO_new_mem_buf(data, (int)size);
@@ -235,11 +226,9 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
       // Try again without certificate verification for self-signed certs
       if (CMS_verify(cms, NULL, NULL, dataBio, NULL, CMS_DETACHED | CMS_BINARY | CMS_NOVERIFY) == 1)
       {
-        printf("DEBUG: CMS_verify with NOVERIFY succeeded\n");
         result = NArchive::NExtract::NOperationResult::kOK;
       }
       else {
-        printf("DEBUG: CMS_verify with NOVERIFY failed, trying NO_SIGNER_CERT_VERIFY\n");
         // Create fresh data BIO for third attempt
         BIO_free(dataBio);
         dataBio = BIO_new_mem_buf(data, (int)size);
@@ -252,11 +241,9 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
         ERR_clear_error();
         if (CMS_verify(cms, NULL, NULL, dataBio, NULL, CMS_DETACHED | CMS_NOVERIFY | CMS_NO_SIGNER_CERT_VERIFY) == 1)
         {
-          printf("DEBUG: CMS_verify with NO_SIGNER_CERT_VERIFY succeeded\n");
           result = NArchive::NExtract::NOperationResult::kOK;
         }
         else {
-          printf("DEBUG: All CMS_verify attempts failed, trying macOS Security framework\n");
           // Fallback to macOS Security framework
           result = NArchive::NExtract::NOperationResult::kSignatureFailed;
           
@@ -279,10 +266,8 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
                   
                   if (status == errSecSuccess && (signerStatus == kCMSSignerValid || 
                       (signerStatus == kCMSSignerInvalidCert && certVerifyResult == -2147409622))) {
-                    printf("DEBUG: macOS Security framework verification succeeded\n");
                     result = NArchive::NExtract::NOperationResult::kOK;
                   } else {
-                    printf("DEBUG: macOS Security framework verification failed, status=%d, signerStatus=%d\n", (int)status, (int)signerStatus);
                   }
                   
                   if (trust) CFRelease(trust);
@@ -295,7 +280,6 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
           
           if (result == NArchive::NExtract::NOperationResult::kSignatureFailed) {
             unsigned long err = ERR_get_error();
-            printf("DEBUG: Final OpenSSL error: %lu\n", err);
           }
         }
       }
@@ -308,7 +292,6 @@ HRESULT CSignatureHandler::Verify(const Byte *data, size_t size, const Byte *sig
   }
 
 #ifdef __APPLE__
-  printf("DEBUG: Using macOS Security framework verification path\n");
   // Security framework verification for keychain-based certificates
   result = NArchive::NExtract::NOperationResult::kSignatureFailed;
   
@@ -416,6 +399,11 @@ HRESULT CSignatureHandler::LoadIdentity(const wchar_t *certPath, const wchar_t *
   AString pathA;
   ConvertUnicodeToUTF8(pathU, pathA);
   
+  // Fix command line parsing bug that adds ':' prefix
+  if (pathA.Len() > 0 && pathA[0] == ':') {
+    pathA = pathA.Ptr() + 1;
+  }
+  
   // Read PKCS#12 file
   FILE* fp = fopen(pathA.Ptr(), "rb");
   if (!fp) {
@@ -464,7 +452,7 @@ HRESULT CSignatureHandler::LoadIdentity(const wchar_t *certPath, const wchar_t *
   EVP_PKEY *pkey = NULL;
   X509 *cert = NULL;
   
-  int result = PKCS12_parse(p12, passA.IsEmpty() ? NULL : passA.Ptr(), &pkey, &cert, NULL);
+  int result = PKCS12_parse(p12, passA.IsEmpty() ? "" : passA.Ptr(), &pkey, &cert, NULL);
   PKCS12_free(p12);
   
   if (!result || !pkey || !cert) {
@@ -517,13 +505,10 @@ CSignatureHandler::CSignatureHandler(): _revocationMode(NRevocationMode::kSoft),
   , _hStore(NULL), _pCertContext(NULL)
 #endif
 {
-  printf("DEBUG: CSignatureHandler constructor called\n");
 #ifdef __APPLE__
   // Use basic X.509 policy - code signing policy is too restrictive for development certs
   _trustPolicy = SecPolicyCreateBasicX509();
-  printf("DEBUG: SecPolicyCreateBasicX509 completed\n");
 #endif
-  printf("DEBUG: CSignatureHandler constructor completed\n");
 }
 
 CSignatureHandler::~CSignatureHandler()

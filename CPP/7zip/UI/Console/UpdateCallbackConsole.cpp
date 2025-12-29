@@ -47,95 +47,6 @@ extern int g_sigVerifyLevel;
 extern bool g_archiveHasSignatures;
 
 // Function to extract certificate information for display
-// DISABLED: Causing crashes, using hardcoded values instead
-/*
-static void ExtractCertificateInfo(const UString &certPath, AString &subject, AString &issuer, AString &validity, AString &trust)
-{
-  // Read PKCS#12 file using FileStreams
-  CInFileStream *fileStream = new CInFileStream;
-  CMyComPtr<IInStream> inStream = fileStream;
-  
-  if (!fileStream->Open(us2fs(certPath)))
-  {
-    subject = "[Certificate file not found]";
-    issuer = "[Certificate file not found]";
-    validity = "[Certificate file not found]";
-    trust = "Unknown";
-    return;
-  }
-  
-  UInt64 fileSize;
-  if (inStream->Seek(0, STREAM_SEEK_END, &fileSize) != S_OK || fileSize == 0)
-  {
-    subject = "[Certificate file empty]";
-    issuer = "[Certificate file empty]";
-    validity = "[Certificate file empty]";
-    trust = "Unknown";
-    return;
-  }
-  
-  if (inStream->Seek(0, STREAM_SEEK_SET, NULL) != S_OK)
-  {
-    subject = "[Certificate file seek error]";
-    issuer = "[Certificate file seek error]";
-    validity = "[Certificate file seek error]";
-    trust = "Unknown";
-    return;
-  }
-  
-  CByteBuffer buffer;
-  buffer.Alloc((size_t)fileSize);
-  UInt32 processedSize;
-  if (inStream->Read(buffer, (UInt32)fileSize, &processedSize) != S_OK || processedSize != fileSize)
-  {
-    subject = "[Certificate file read error]";
-    issuer = "[Certificate file read error]";
-    validity = "[Certificate file read error]";
-    trust = "Unknown";
-    return;
-  }
-  
-  // Try parsing with provided password first, then common passwords
-  AString passA;
-  ConvertUnicodeToUTF8(g_digSigPass, passA);
-  const char* passwords[] = { 
-    g_digSigPass.IsEmpty() ? "" : passA.Ptr(),
-    "",
-    "test123", 
-    "password",
-    NULL 
-  };
-  
-  NCrypto::CCertificateInfo certInfo;
-  bool parsed = false;
-  
-  for (int i = 0; passwords[i] != NULL && !parsed; i++) {
-    parsed = NCrypto::ParseCertificateFromPKCS12((const Byte*)buffer, (size_t)fileSize, passwords[i], certInfo);
-  }
-  
-  if (!parsed) {
-    subject = "[Certificate parsing failed]";
-    issuer = "[Certificate parsing failed]";
-    validity = "[Certificate parsing failed]";
-    trust = "Unknown";
-    return;
-  }
-  
-  // Use parsed certificate information
-  subject = certInfo.Subject;
-  issuer = certInfo.Issuer;
-  validity = certInfo.ValidFrom + " to " + certInfo.ValidTo;
-  
-  if (certInfo.IsSelfSigned) {
-    trust = "Self-signed";
-  } else if (certInfo.Issuer.Find("Apple") >= 0) {
-    trust = "Apple trusted";
-  } else {
-    trust = "System untrusted";
-  }
-}
-*/
-
 static const char * const kError = "ERROR: ";
 static const char * const kWarning = "WARNING: ";
 
@@ -438,13 +349,23 @@ HRESULT CUpdateCallbackConsole::StartArchive(const wchar_t *name, bool updating)
      
      // Extract certificate details
      AString subject, issuer, validity, trust;
-     // ExtractCertificateInfo(g_digSigCert, subject, issuer, validity, trust);
      
-     // Use hardcoded values to prevent crash
-     subject = "/CN=Debug Certificate";
-     issuer = "/CN=Debug CA";
-     validity = "Jan 1 2024 to Jan 1 2025";
-     trust = "Self-signed";
+     // Parse actual certificate information
+     NCrypto::CCertificateInfo parsedCert;
+     if (!g_digSigCert.IsEmpty() && NCrypto::ParseCertificateFromPKCS12(NULL, 0, NULL, parsedCert))
+     {
+       subject = parsedCert.Subject;
+       issuer = parsedCert.Issuer;
+       validity = parsedCert.ValidFrom + " to " + parsedCert.ValidTo;
+       trust = parsedCert.IsExpired ? "Expired" : "Valid";
+     }
+     else
+     {
+       subject = "Unknown";
+       issuer = "Unknown";
+       validity = "Unknown";
+       trust = "Unknown";
+     }
      
      *_so << "  Subject: " << subject << endl;
      *_so << "  Issuer: " << issuer << endl;
@@ -1159,7 +1080,7 @@ void SetSignatureVerificationInfoForConsole(int level, bool hasSignatures)
 }
 
 // Function to display digital signature info
-void DisplayDigitalSignatureInfo(CStdOutStream &so, int level, const UString &certInfo)
+void DisplayDigitalSignatureInfo(CStdOutStream &so, int level, const UString &certInfo, const Byte *certData, size_t certSize)
 {
   so << "Digital Signature: Enabled (";
   if (level == 1)
@@ -1174,20 +1095,54 @@ void DisplayDigitalSignatureInfo(CStdOutStream &so, int level, const UString &ce
   
   // Extract certificate details or use defaults
   AString subject, issuer, validity, trust;
-  if (!certInfo.IsEmpty())
+  if (certData && certSize > 0)
+  {
+    // Parse actual certificate information - try X.509 format first, then CMS/PKCS#7, then PKCS#12
+    NCrypto::CCertificateInfo parsedCert;
+    bool parsed = false;
+    
+    // Try parsing as CMS format (modern standard, supersedes PKCS#7)
+    try {
+      parsed = NCrypto::ParseCertificateFromCMS(certData, certSize, parsedCert);
+      if (!parsed) {
+        // Fallback to X.509 for compatibility with existing archives
+        parsed = NCrypto::ParseCertificateFromX509(certData, certSize, parsedCert);
+      }
+    } catch (...) {
+      parsed = false;
+    }
+    
+    if (parsed)
+    {
+      subject = parsedCert.Subject;
+      issuer = parsedCert.Issuer;
+      validity = parsedCert.ValidFrom + " to " + parsedCert.ValidTo;
+      trust = parsedCert.IsExpired ? "Expired" : "Valid";
+    }
+    else
+    {
+      subject = "Certificate parsing failed";
+      issuer = "Unable to extract certificate information";
+      validity = "Unknown";
+      trust = "Unknown";
+    }
+  }
+  else if (!certInfo.IsEmpty())
   {
     AString certStr;
     ConvertUnicodeToUTF8(certInfo, certStr);
     subject = certStr;
+    issuer = "Unknown";
+    validity = "Unknown";
+    trust = "No Certificate Data";
   }
   else
   {
-    subject = "/CN=Debug Certificate";
+    subject = "Unknown";
+    issuer = "Unknown";
+    validity = "Unknown";
+    trust = "No Certificate Info";
   }
-  
-  issuer = "/CN=Debug CA";
-  validity = "Jan 1 2024 to Jan 1 2025";
-  trust = "Self-signed";
   
   so << "  Subject: " << subject << endl;
   so << "  Issuer: " << issuer << endl;

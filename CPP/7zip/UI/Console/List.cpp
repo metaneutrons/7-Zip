@@ -1351,14 +1351,23 @@ HRESULT ListArchives(
       if (hasArchiveSig || hasFileSigs)
       {
         // Get certificate information from archive properties
-        CPropVariant signerProp;
+        CPropVariant signerProp, certStoreProp;
         UString certInfo;
         
         if (arc.Archive->GetArchiveProperty(kpidSignerName, &signerProp) == S_OK && signerProp.vt == VT_BSTR && signerProp.bstrVal)
           certInfo = signerProp.bstrVal;
         
+        // Get actual certificate data for parsing
+        const Byte *certData = NULL;
+        size_t certSize = 0;
+        if (arc.Archive->GetArchiveProperty(kpidCertificateStore, &certStoreProp) == S_OK && certStoreProp.vt == VT_BLOB)
+        {
+          certData = (const Byte*)certStoreProp.blob.pBlobData;
+          certSize = certStoreProp.blob.cbSize;
+        }
+        
         int level = hasArchiveSig && hasFileSigs ? 3 : (hasArchiveSig ? 1 : 2);
-        DisplayDigitalSignatureInfo(g_StdOut, level, certInfo);
+        DisplayDigitalSignatureInfo(g_StdOut, level, certInfo, certData, certSize);
       }
       
       // Initialize field printer based on whether we have file signatures
