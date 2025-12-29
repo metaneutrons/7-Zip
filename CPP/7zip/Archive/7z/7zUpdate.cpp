@@ -3129,7 +3129,7 @@ HRESULT Update(
   if (!options.DigSigCert.IsEmpty() && options.DigSigLevel != 2)
   {
     // Hash header content for comprehensive coverage
-    // Must match verification hash computation exactly
+    // NOTE: This hash computation MUST match the one in 7zHandler.cpp for verification
     CSha256 sha;
     Sha256_Init(&sha);
     

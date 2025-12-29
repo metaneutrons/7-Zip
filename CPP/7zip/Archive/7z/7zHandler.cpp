@@ -363,6 +363,18 @@ static void SetFileTimeProp_From_UInt64Def(PROPVARIANT *prop, const CUInt64DefVe
     PropVarEm_Set_FileTime64_Prec(prop, value, k_PropVar_TimePrec_100ns);
 }
 
+void CHandler::StoreCertInfo(const NCrypto::CCertInfo &certInfo)
+{
+  _signerName = certInfo.Subject;
+  _signerIssuer = certInfo.Issuer;
+  _signerWeakKey = certInfo.IsWeakKey;
+  _signerWeakAlgo = certInfo.IsWeakAlgo;
+  _signerExpired = certInfo.IsExpired;
+  _hasTimestamp = certInfo.TimestampInfo.HasTimestamp;
+  _timestampAuthority = certInfo.TimestampInfo.Authority;
+  _timestampTime = certInfo.TimestampInfo.Timestamp;
+}
+
 bool CHandler::IsFolderEncrypted(CNum folderIndex) const
 {
   if (folderIndex == kNumNoIndex)
@@ -806,6 +818,7 @@ Z7_COM7F_IMF(CHandler::Open(IInStream *stream,
     {
       try {
         // Compute hash of header content for signature verification
+        // NOTE: This hash computation MUST match the one in 7zUpdate.cpp for signing
         CSha256 sha;
         Sha256_Init(&sha);
         
@@ -853,7 +866,6 @@ Z7_COM7F_IMF(CHandler::Open(IInStream *stream,
           Sha256_Update(&sha, (const Byte *)&attr, sizeof(attr));
         }
         
-        // Include file signatures for cryptographic binding
         // Include file signatures for cryptographic binding (must match signing)
         for (unsigned i = 0; i < _db.FileSignatures.Size(); i++)
         {
@@ -872,14 +884,7 @@ Z7_COM7F_IMF(CHandler::Open(IInStream *stream,
                           _db.ArcInfo.ArchiveSignature,
                           _db.ArcInfo.ArchiveSignature.Size(),
                           _signatureVerifyResult, certInfo);
-        _signerName = certInfo.Subject;
-        _signerIssuer = certInfo.Issuer;
-        _signerWeakKey = certInfo.IsWeakKey;
-        _signerWeakAlgo = certInfo.IsWeakAlgo;
-        _signerExpired = certInfo.IsExpired;
-        _hasTimestamp = certInfo.TimestampInfo.HasTimestamp;
-        _timestampAuthority = certInfo.TimestampInfo.Authority;
-        _timestampTime = certInfo.TimestampInfo.Timestamp;
+        StoreCertInfo(certInfo);
         
         // Extract certificate store for detailed parsing
         sigHandler.GetCertificateChain(_db.ArcInfo.CertificateStore);
@@ -913,14 +918,7 @@ Z7_COM7F_IMF(CHandler::Open(IInStream *stream,
                               verifyResult, certInfo);
             
             // Store certificate info even if verification fails
-            _signerName = certInfo.Subject;
-            _signerIssuer = certInfo.Issuer;
-            _signerWeakKey = certInfo.IsWeakKey;
-            _signerWeakAlgo = certInfo.IsWeakAlgo;
-            _signerExpired = certInfo.IsExpired;
-            _hasTimestamp = certInfo.TimestampInfo.HasTimestamp;
-            _timestampAuthority = certInfo.TimestampInfo.Authority;
-            _timestampTime = certInfo.TimestampInfo.Timestamp;
+            StoreCertInfo(certInfo);
             
             // Extract certificate store for detailed parsing
             sigHandler.GetCertificateChain(_db.ArcInfo.CertificateStore);

@@ -8,6 +8,9 @@
 
 #include "../../Common/CreateCoder.h"
 
+// Forward declaration for signature support
+namespace NCrypto { struct CCertInfo; }
+
 #ifndef Z7_7Z_SET_PROPERTIES
 
 #ifdef Z7_EXTRACT_ONLY
@@ -174,6 +177,7 @@ private:
   #endif
 
   bool IsFolderEncrypted(CNum folderIndex) const;
+  void StoreCertInfo(const NCrypto::CCertInfo &certInfo);
   #ifndef Z7_SFX
 
   CRecordVector<UInt64> _fileInfoPopIDs;
