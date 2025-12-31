@@ -35,3 +35,18 @@
 # Build directories
 CPP/7zip/Bundles/*/b/
 */_o/
+
+# Test data and artifacts
+*.7z
+*.zip
+*.tar
+*.gz
+*.p12
+*.pfx
+*.pem
+*.crt
+*.key
+**/test*.txt
+**/ComprehensiveTestData/
+**/extracted/
+cert_consistency_test.sh
