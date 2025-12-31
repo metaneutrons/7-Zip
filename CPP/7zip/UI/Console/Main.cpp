@@ -1284,6 +1284,34 @@ int Main2(
   }
   else if (isExtractGroupCommand || options.Command.CommandType == NCommandType::kList)
   {
+    // Digital signature validation for extract/list operations
+    bool trustStoreSpecified = false;
+    UString trustStorePath;
+    
+    // Check properties for digital signature parameters
+    for (unsigned i = 0; i < options.Properties.Size(); i++)
+    {
+      if (options.Properties[i].Name.IsEqualTo_Ascii_NoCase("dst"))
+      {
+        trustStoreSpecified = true;
+        trustStorePath = options.Properties[i].Value;
+      }
+    }
+    
+    // Validate trust store file exists if specified
+    if (trustStoreSpecified && !trustStorePath.IsEmpty())
+    {
+      // Try to open the file to check if it exists
+      NFile::NIO::CInFile file;
+      if (!file.Open(us2fs(trustStorePath)))
+      {
+        *g_StdStream << "Error: Trust store file not found: " << trustStorePath << endl;
+        return 7;
+      }
+      file.Close();
+    }
+    
+  {
     UStringVector ArchivePathsSorted;
     UStringVector ArchivePathsFullSorted;
 
@@ -1552,12 +1580,59 @@ int Main2(
       }
     } // if_(isExtractGroupCommand)
     } // if_(hresultMain == S_OK)
+  } // validation block
   }
   else if (options.Command.IsFromUpdateGroup())
   {
    #ifdef Z7_EXTRACT_ONLY
     throw "update commands are not implemented";
    #else
+    // Validate digital signature parameters for update commands
+    bool sigLevelSpecified = false;
+    bool sigAlgoSpecified = false;
+    UString digSigCert;
+    
+    // Check properties for digital signature parameters
+    for (unsigned i = 0; i < options.Properties.Size(); i++)
+    {
+      if (options.Properties[i].Name.IsEqualTo_Ascii_NoCase("dsl"))
+      {
+        sigLevelSpecified = true;
+      }
+      else if (options.Properties[i].Name.IsEqualTo_Ascii_NoCase("dsa"))
+      {
+        sigAlgoSpecified = true;
+      }
+      else if (options.Properties[i].Name.IsEqualTo_Ascii_NoCase("dsc"))
+      {
+        digSigCert = options.Properties[i].Value;
+      }
+    }
+    
+    if ((sigLevelSpecified || sigAlgoSpecified) && digSigCert.IsEmpty())
+    {
+      *g_StdStream << "Error: Digital signature level or algorithm specified but no certificate provided. Use -dsc to specify certificate." << endl;
+      return 7;
+    }
+    
+    // Validate certificate file exists if specified
+    if (!digSigCert.IsEmpty())
+    {
+      // Check if it's a file path (contains path separators or file extension)
+      if (digSigCert.Find(L'/') >= 0 || digSigCert.Find(L'\\') >= 0 || 
+          digSigCert.Find(L'.') >= 0)
+      {
+        // Try to open the file to check if it exists
+        NFile::NIO::CInFile file;
+        if (!file.Open(us2fs(digSigCert)))
+        {
+          *g_StdStream << "Error: Certificate file not found: " << digSigCert << endl;
+          return 7;
+        }
+        file.Close();
+      }
+    }
+
     CUpdateOptions &uo = options.UpdateOptions;
     if (uo.SfxMode && uo.SfxModule.IsEmpty())
       uo.SfxModule = kDefaultSfxModule;
